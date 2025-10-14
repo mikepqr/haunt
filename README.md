@@ -6,7 +6,7 @@ A dotfiles symlink manager.
 
 ```bash
 # Run directly with uvx (no install needed)
-uvx haunt ~/.dotfiles
+uvx haunt
 
 # Or install globally with uv
 uv tool install haunt
