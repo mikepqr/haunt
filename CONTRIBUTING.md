@@ -1,0 +1,98 @@
+# Contributing to haunt
+
+Thank you for your interest in contributing to haunt!
+
+## Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install it with:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/mikepqr/haunt.git
+cd haunt
+```
+
+## Running Checks Locally
+
+Before submitting a PR, ensure all checks pass locally. This saves time by catching issues before CI runs.
+
+### Run All Checks
+
+Run everything that CI will check:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src
+uv run pytest --cov=haunt --cov-report=term-missing
+```
+
+### Individual Commands
+
+**Linting:**
+```bash
+uv run ruff check .
+```
+
+**Auto-fix linting issues:**
+```bash
+uv run ruff check --fix .
+```
+
+**Format code:**
+```bash
+uv run ruff format .
+```
+
+**Type checking:**
+```bash
+uv run mypy src
+```
+
+**Tests:**
+```bash
+uv run pytest
+```
+
+**Tests with coverage:**
+```bash
+uv run pytest --cov=haunt --cov-report=term-missing
+```
+
+## Pre-commit Hooks (Optional)
+
+You can install pre-commit hooks to run checks automatically before each commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+The hooks will run ruff (linting and formatting) and mypy on staged files.
+
+## Code Standards
+
+- **Python version:** 3.12+ required
+- **Type hints:** All functions must be fully typed (mypy strict mode)
+- **Formatting:** Ruff with 88 character line length
+- **Imports:** One import per line (enforced by ruff's isort config)
+- **Tests:** Maintain or improve code coverage
+
+## CI Pipeline
+
+GitHub Actions will run on all PRs:
+- Ruff linting and format checking
+- mypy type checking (strict mode)
+- pytest with coverage on Python 3.12 and 3.13
+- Tests run on both Ubuntu and macOS
+
+All checks must pass before merging.
+
+## Questions?
+
+Open an issue at https://github.com/mikepqr/haunt/issues
