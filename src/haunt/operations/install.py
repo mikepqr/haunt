@@ -8,8 +8,10 @@ from haunt.exceptions import ConflictError
 from haunt.files import check_conflict
 from haunt.files import create_symlink
 from haunt.files import discover_files
+from haunt.models import Conflict
 from haunt.models import ConflictMode
-from haunt.models import ConflictType
+from haunt.models import CorrectSymlinkConflict
+from haunt.models import DirectoryConflict
 from haunt.models import InstallPlan
 from haunt.models import PackageEntry
 from haunt.models import Symlink
@@ -42,8 +44,8 @@ def compute_install_plan(
     target_dir = normalize_target_dir(target_dir)
 
     package_name = package_dir.name
-    symlinks_to_create = []
-    conflicts = []
+    symlinks_to_create: list[Symlink] = []
+    conflicts: list[Conflict] = []
 
     # Discover all files in the package
     files = discover_files(package_dir)
@@ -64,16 +66,15 @@ def compute_install_plan(
         if conflict is None:
             # Nothing exists, always create symlink
             symlinks_to_create.append(symlink)
-        elif conflict.type == ConflictType.CORRECT_SYMLINK:
+        elif isinstance(conflict, CorrectSymlinkConflict):
             # Symlink already correct, never recreate
             conflicts.append(conflict)
         else:
             # Real conflict - record it for reporting
             conflicts.append(conflict)
             # In FORCE mode, replace non-directory conflicts
-            if (
-                on_conflict == ConflictMode.FORCE
-                and conflict.type != ConflictType.DIRECTORY
+            if on_conflict == ConflictMode.FORCE and not isinstance(
+                conflict, DirectoryConflict
             ):
                 symlinks_to_create.append(symlink)
 
@@ -104,7 +105,7 @@ def execute_install_plan(
     """
     # Check for directory conflicts - these always block regardless of mode
     directory_conflicts = [
-        c for c in plan.conflicts if c.type == ConflictType.DIRECTORY
+        c for c in plan.conflicts if isinstance(c, DirectoryConflict)
     ]
     if directory_conflicts:
         raise ConflictError(directory_conflicts)
@@ -112,7 +113,7 @@ def execute_install_plan(
     # Check for other blocking conflicts if ABORT mode
     if on_conflict == ConflictMode.ABORT:
         blocking_conflicts = [
-            c for c in plan.conflicts if c.type != ConflictType.CORRECT_SYMLINK
+            c for c in plan.conflicts if not isinstance(c, CorrectSymlinkConflict)
         ]
         if blocking_conflicts:
             raise ConflictError(blocking_conflicts)
@@ -125,7 +126,7 @@ def execute_install_plan(
     # Build list of all symlinks for registry (created + already correct)
     all_symlinks = plan.symlinks_to_create.copy()
     for conflict in plan.conflicts:
-        if conflict.type == ConflictType.CORRECT_SYMLINK:
+        if isinstance(conflict, CorrectSymlinkConflict):
             # Reconstruct symlink from conflict info
             # We need to resolve points_to to get the absolute source path
             absolute_source = (conflict.path.parent / conflict.points_to).resolve()

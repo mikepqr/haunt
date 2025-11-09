@@ -3,8 +3,7 @@
 from pathlib import Path
 
 from haunt.exceptions import ConflictError
-from haunt.models import ConflictInfo
-from haunt.models import ConflictType
+from haunt.models import FileConflict
 
 
 class TestConflictError:
@@ -13,16 +12,8 @@ class TestConflictError:
     def test_formats_message_with_few_conflicts(self):
         """Test that error message lists all conflicts when 3 or fewer."""
         conflicts = [
-            ConflictInfo(
-                path=Path("/home/user/.bashrc"),
-                type=ConflictType.FILE,
-                points_to=None,
-            ),
-            ConflictInfo(
-                path=Path("/home/user/.vimrc"),
-                type=ConflictType.FILE,
-                points_to=None,
-            ),
+            FileConflict(path=Path("/home/user/.bashrc")),
+            FileConflict(path=Path("/home/user/.vimrc")),
         ]
 
         error = ConflictError(conflicts)
@@ -33,14 +24,7 @@ class TestConflictError:
 
     def test_formats_message_with_many_conflicts(self):
         """Test that error message truncates and shows count when > 3 conflicts."""
-        conflicts = [
-            ConflictInfo(
-                path=Path(f"/home/user/.file{i}"),
-                type=ConflictType.FILE,
-                points_to=None,
-            )
-            for i in range(5)
-        ]
+        conflicts = [FileConflict(path=Path(f"/home/user/.file{i}")) for i in range(5)]
 
         error = ConflictError(conflicts)
 

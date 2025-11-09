@@ -6,9 +6,11 @@ from unittest.mock import patch
 import pytest
 
 from haunt.exceptions import ConflictError
-from haunt.models import ConflictInfo
 from haunt.models import ConflictMode
-from haunt.models import ConflictType
+from haunt.models import CorrectSymlinkConflict
+from haunt.models import DifferentSymlinkConflict
+from haunt.models import DirectoryConflict
+from haunt.models import FileConflict
 from haunt.models import InstallPlan
 from haunt.models import Symlink
 from haunt.operations import compute_install_plan
@@ -105,7 +107,7 @@ class TestComputeInstallPlan:
         assert len(plan.conflicts) == 1
         conflict = plan.conflicts[0]
         assert conflict.path == target_dir / "bashrc"
-        assert conflict.type == ConflictType.FILE
+        assert isinstance(conflict, FileConflict)
 
     def test_detects_wrong_symlink_conflict(self, tmp_path):
         """Test that symlinks pointing to wrong location are conflicts."""
@@ -126,7 +128,7 @@ class TestComputeInstallPlan:
         assert len(plan.conflicts) == 1
         conflict = plan.conflicts[0]
         assert conflict.path == target_dir / "bashrc"
-        assert conflict.type == ConflictType.DIFFERENT_SYMLINK
+        assert isinstance(conflict, DifferentSymlinkConflict)
         assert conflict.points_to == wrong_source
 
     def test_no_conflict_when_symlink_already_correct(self, tmp_path):
@@ -147,7 +149,7 @@ class TestComputeInstallPlan:
 
         # Should have one CORRECT_SYMLINK conflict (for reporting) and no files to link
         assert len(plan.conflicts) == 1
-        assert plan.conflicts[0].type == ConflictType.CORRECT_SYMLINK
+        assert isinstance(plan.conflicts[0], CorrectSymlinkConflict)
         assert len(plan.symlinks_to_create) == 0
 
     def test_symlinks_use_absolute_paths(self, tmp_path):
@@ -185,7 +187,7 @@ class TestComputeInstallPlan:
 
         # File conflict should be in conflicts, not symlinks_to_create
         assert len(plan.conflicts) == 1
-        assert plan.conflicts[0].type == ConflictType.FILE
+        assert isinstance(plan.conflicts[0], FileConflict)
         assert len(plan.symlinks_to_create) == 0
 
     def test_force_mode_moves_file_conflicts_to_create_list(self, tmp_path):
@@ -204,7 +206,7 @@ class TestComputeInstallPlan:
 
         # Conflict should be in both lists for tracking
         assert len(plan.conflicts) == 1
-        assert plan.conflicts[0].type == ConflictType.FILE
+        assert isinstance(plan.conflicts[0], FileConflict)
         # And in symlinks_to_create for execution
         assert len(plan.symlinks_to_create) == 1
         assert plan.symlinks_to_create[0].link_path == target_dir / "file1.txt"
@@ -225,7 +227,7 @@ class TestComputeInstallPlan:
 
         # Directory conflict should be in conflicts
         assert len(plan.conflicts) == 1
-        assert plan.conflicts[0].type == ConflictType.DIRECTORY
+        assert isinstance(plan.conflicts[0], DirectoryConflict)
         # But NOT in symlinks_to_create
         assert len(plan.symlinks_to_create) == 0
 
@@ -246,7 +248,7 @@ class TestComputeInstallPlan:
 
         # Conflict should be in conflicts, not symlinks_to_create
         assert len(plan.conflicts) == 1
-        assert plan.conflicts[0].type == ConflictType.FILE
+        assert isinstance(plan.conflicts[0], FileConflict)
         # But file2 should be in symlinks_to_create
         assert len(plan.symlinks_to_create) == 1
         assert plan.symlinks_to_create[0].link_path == target_dir / "file2.txt"
@@ -388,9 +390,8 @@ class TestExecuteInstallPlan:
             target_dir=target_dir,
             symlinks_to_create=[new_symlink],
             conflicts=[
-                ConflictInfo(
+                CorrectSymlinkConflict(
                     path=target_dir / "file2.txt",
-                    type=ConflictType.CORRECT_SYMLINK,
                     points_to=Path(
                         "../package/file2.txt"
                     ),  # Relative path from readlink
@@ -427,10 +428,8 @@ class TestExecuteInstallPlan:
             target_dir=target_dir,
             symlinks_to_create=[],
             conflicts=[
-                ConflictInfo(
+                DirectoryConflict(
                     path=target_dir / "somedir",
-                    type=ConflictType.DIRECTORY,
-                    points_to=None,
                 )
             ],
         )
@@ -439,7 +438,7 @@ class TestExecuteInstallPlan:
             execute_install_plan(plan, registry_path, on_conflict=ConflictMode.ABORT)
 
         assert len(exc_info.value.conflicts) == 1
-        assert exc_info.value.conflicts[0].type == ConflictType.DIRECTORY
+        assert isinstance(exc_info.value.conflicts[0], DirectoryConflict)
 
     def test_raises_for_directory_conflicts_even_in_force_mode(self, tmp_path):
         """Test that directory conflicts raise ConflictError even in FORCE mode."""
@@ -454,10 +453,8 @@ class TestExecuteInstallPlan:
             target_dir=target_dir,
             symlinks_to_create=[],
             conflicts=[
-                ConflictInfo(
+                DirectoryConflict(
                     path=target_dir / "somedir",
-                    type=ConflictType.DIRECTORY,
-                    points_to=None,
                 )
             ],
         )
@@ -466,7 +463,7 @@ class TestExecuteInstallPlan:
             execute_install_plan(plan, registry_path, on_conflict=ConflictMode.FORCE)
 
         assert len(exc_info.value.conflicts) == 1
-        assert exc_info.value.conflicts[0].type == ConflictType.DIRECTORY
+        assert isinstance(exc_info.value.conflicts[0], DirectoryConflict)
 
     def test_raises_for_file_conflicts_in_abort_mode(self, tmp_path):
         """Test that file conflicts raise ConflictError in ABORT mode."""
@@ -481,10 +478,8 @@ class TestExecuteInstallPlan:
             target_dir=target_dir,
             symlinks_to_create=[],
             conflicts=[
-                ConflictInfo(
+                FileConflict(
                     path=target_dir / "file.txt",
-                    type=ConflictType.FILE,
-                    points_to=None,
                 )
             ],
         )
@@ -493,7 +488,7 @@ class TestExecuteInstallPlan:
             execute_install_plan(plan, registry_path, on_conflict=ConflictMode.ABORT)
 
         assert len(exc_info.value.conflicts) == 1
-        assert exc_info.value.conflicts[0].type == ConflictType.FILE
+        assert isinstance(exc_info.value.conflicts[0], FileConflict)
 
     def test_succeeds_with_file_conflicts_in_skip_mode(self, tmp_path):
         """Test that file conflicts don't raise in SKIP mode."""
@@ -508,10 +503,8 @@ class TestExecuteInstallPlan:
             target_dir=target_dir,
             symlinks_to_create=[],
             conflicts=[
-                ConflictInfo(
+                FileConflict(
                     path=target_dir / "file.txt",
-                    type=ConflictType.FILE,
-                    points_to=None,
                 )
             ],
         )

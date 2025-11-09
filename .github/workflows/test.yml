@@ -34,7 +34,7 @@ jobs:
 
     - name: Type check with mypy
       run: |
-        uv run mypy src
+        uv run mypy
 
     - name: Run tests
       run: |

@@ -28,7 +28,7 @@ Run everything that CI will check:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy src
+uv run mypy
 uv run pytest --cov=haunt --cov-report=term-missing
 ```
 
@@ -51,7 +51,7 @@ uv run ruff format .
 
 **Type checking:**
 ```bash
-uv run mypy src
+uv run mypy
 ```
 
 **Tests:**
@@ -69,11 +69,11 @@ uv run pytest --cov=haunt --cov-report=term-missing
 You can install pre-commit hooks to run checks automatically before each commit:
 
 ```bash
-pip install pre-commit
+uv tool install pre-commit
 pre-commit install
 ```
 
-The hooks will run ruff (linting and formatting) and mypy on staged files.
+The hooks will run ruff (linting and formatting) and mypy (type checking) on staged files.
 
 ## Code Standards
 

@@ -55,3 +55,4 @@ force-single-line = true
 [tool.mypy]
 python_version = "3.12"
 strict = true
+files = ["src"]

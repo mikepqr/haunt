@@ -1,19 +1,23 @@
 """Symlink operations."""
 
-from haunt.models import ConflictInfo
-from haunt.models import ConflictType
+from haunt.models import BrokenSymlinkConflict
+from haunt.models import Conflict
+from haunt.models import CorrectSymlinkConflict
+from haunt.models import DifferentSymlinkConflict
+from haunt.models import DirectoryConflict
+from haunt.models import FileConflict
 from haunt.models import Symlink
 
 
-def check_conflict(symlink: Symlink) -> ConflictInfo | None:
+def check_conflict(symlink: Symlink) -> Conflict | None:
     """Check if a symlink conflicts with existing files.
 
     Args:
         symlink: Symlink to check for conflicts (source_path should be absolute)
 
     Returns:
-        ConflictInfo if something exists at link_path, None if nothing exists.
-        ConflictType.ALREADY_CORRECT means symlink exists and points correctly.
+        Conflict if something exists at link_path, None if nothing exists.
+        CorrectSymlinkConflict means symlink exists and points correctly.
     """
     # Nothing exists, no conflict
     if not symlink.link_path.exists() and not symlink.link_path.is_symlink():
@@ -24,40 +28,29 @@ def check_conflict(symlink: Symlink) -> ConflictInfo | None:
         actual_target = symlink.link_path.readlink()
 
         if symlink.exists():
-            return ConflictInfo(
+            return CorrectSymlinkConflict(
                 path=symlink.link_path,
-                type=ConflictType.CORRECT_SYMLINK,
                 points_to=actual_target,
             )
 
         # Symlink points to wrong location - check if broken
         if not symlink.link_path.exists():
-            return ConflictInfo(
+            return BrokenSymlinkConflict(
                 path=symlink.link_path,
-                type=ConflictType.BROKEN_SYMLINK,
                 points_to=actual_target,
             )
 
         # Symlink points to different location (but target exists)
-        return ConflictInfo(
+        return DifferentSymlinkConflict(
             path=symlink.link_path,
-            type=ConflictType.DIFFERENT_SYMLINK,
             points_to=actual_target,
         )
 
     # It exists as something else - directory or file?
     if symlink.link_path.is_dir():
-        return ConflictInfo(
-            path=symlink.link_path,
-            type=ConflictType.DIRECTORY,
-            points_to=None,
-        )
+        return DirectoryConflict(path=symlink.link_path)
     else:
-        return ConflictInfo(
-            path=symlink.link_path,
-            type=ConflictType.FILE,
-            points_to=None,
-        )
+        return FileConflict(path=symlink.link_path)
 
 
 def remove_symlink(symlink: Symlink) -> None:

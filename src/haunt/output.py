@@ -6,7 +6,8 @@ import typer
 
 from haunt.exceptions import ConflictError
 from haunt.models import ConflictMode
-from haunt.models import ConflictType
+from haunt.models import CorrectSymlinkConflict
+from haunt.models import DirectoryConflict
 from haunt.models import InstallPlan
 from haunt.models import UninstallPlan
 
@@ -30,13 +31,13 @@ def print_install_plan(
 
     # Categorize conflicts
     already_correct = [
-        c for c in plan.conflicts if c.type == ConflictType.CORRECT_SYMLINK
+        c for c in plan.conflicts if isinstance(c, CorrectSymlinkConflict)
     ]
     num_already_correct = len(already_correct)
 
     # In FORCE mode, determine which symlinks are replacements vs new
     conflict_paths = {
-        c.path for c in plan.conflicts if c.type != ConflictType.CORRECT_SYMLINK
+        c.path for c in plan.conflicts if not isinstance(c, CorrectSymlinkConflict)
     }
     new_symlinks = [
         s for s in plan.symlinks_to_create if s.link_path not in conflict_paths
@@ -142,11 +143,11 @@ def print_conflict_error(error: ConflictError, on_conflict: ConflictMode) -> Non
     """
     typer.secho("✗ Conflicts detected:", fg=typer.colors.RED, bold=True, err=True)
     for conflict in error.conflicts:
-        conflict_type = conflict.type.name.replace("_", " ").lower()
+        conflict_type = type(conflict).__name__.replace("Conflict", "").lower()
         typer.secho(f"  {conflict.path} ({conflict_type})", err=True)
 
     # Suggest resolution based on conflict types
-    has_directories = any(c.type == ConflictType.DIRECTORY for c in error.conflicts)
+    has_directories = any(isinstance(c, DirectoryConflict) for c in error.conflicts)
     if has_directories:
         typer.secho(
             "\nDirectory conflicts require manual resolution (cannot be forced)",

@@ -5,14 +5,23 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from typing import Self
+from typing import TypedDict
 
 from platformdirs import user_state_path
 
 from haunt.exceptions import RegistryValidationError
 from haunt.exceptions import RegistryVersionError
 from haunt.models import PackageEntry
+from haunt.models import PackageEntryDict
 
 REGISTRY_VERSION = 1
+
+
+class RegistryDict(TypedDict):
+    """JSON-serializable representation of a Registry."""
+
+    version: int
+    packages: dict[str, PackageEntryDict]
 
 
 @dataclass
@@ -27,7 +36,7 @@ class Registry:
         """Get default registry location using platformdirs."""
         return user_state_path("haunt") / "registry.json"
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> RegistryDict:
         """Convert to JSON-serializable dict."""
         return {
             "version": self.version,
@@ -37,7 +46,7 @@ class Registry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Self:
+    def from_dict(cls, data: RegistryDict) -> Self:
         """Create from dict loaded from JSON."""
         if "version" not in data:
             raise RegistryValidationError("Registry missing 'version' key")

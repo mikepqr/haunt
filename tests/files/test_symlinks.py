@@ -7,7 +7,11 @@ import pytest
 from haunt.files import check_conflict
 from haunt.files import create_symlink
 from haunt.files import remove_symlink
-from haunt.models import ConflictType
+from haunt.models import BrokenSymlinkConflict
+from haunt.models import CorrectSymlinkConflict
+from haunt.models import DifferentSymlinkConflict
+from haunt.models import DirectoryConflict
+from haunt.models import FileConflict
 from haunt.models import Symlink
 
 
@@ -106,7 +110,7 @@ class TestCheckConflict:
         conflict = check_conflict(symlink)
 
         assert conflict is not None
-        assert conflict.type == ConflictType.CORRECT_SYMLINK
+        assert isinstance(conflict, CorrectSymlinkConflict)
         assert conflict.path == link_path
         assert conflict.points_to == source
 
@@ -120,9 +124,8 @@ class TestCheckConflict:
         conflict = check_conflict(symlink)
 
         assert conflict is not None
+        assert isinstance(conflict, FileConflict)
         assert conflict.path == link_path
-        assert conflict.type == ConflictType.FILE
-        assert conflict.points_to is None
 
     def test_conflict_when_symlink_points_to_wrong_location(self, tmp_path):
         """Test that conflict is detected when symlink points elsewhere."""
@@ -136,8 +139,8 @@ class TestCheckConflict:
         conflict = check_conflict(symlink)
 
         assert conflict is not None
+        assert isinstance(conflict, DifferentSymlinkConflict)
         assert conflict.path == link_path
-        assert conflict.type == ConflictType.DIFFERENT_SYMLINK
         assert conflict.points_to == wrong_source
 
     def test_conflict_for_broken_symlink(self, tmp_path):
@@ -151,8 +154,8 @@ class TestCheckConflict:
         conflict = check_conflict(symlink)
 
         assert conflict is not None
+        assert isinstance(conflict, BrokenSymlinkConflict)
         assert conflict.path == link_path
-        assert conflict.type == ConflictType.BROKEN_SYMLINK
         assert conflict.points_to == nonexistent_source
 
     def test_conflict_when_directory_exists(self, tmp_path):
@@ -165,9 +168,8 @@ class TestCheckConflict:
         conflict = check_conflict(symlink)
 
         assert conflict is not None
+        assert isinstance(conflict, DirectoryConflict)
         assert conflict.path == link_path
-        assert conflict.type == ConflictType.DIRECTORY
-        assert conflict.points_to is None
 
 
 class TestRemoveSymlink:

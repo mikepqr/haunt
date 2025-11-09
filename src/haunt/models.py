@@ -2,9 +2,25 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from enum import auto
 from pathlib import Path
 from typing import Self
+from typing import TypedDict
+
+
+class SymlinkDict(TypedDict):
+    """JSON-serializable representation of a Symlink."""
+
+    link_path: str
+    source_path: str
+
+
+class PackageEntryDict(TypedDict):
+    """JSON-serializable representation of a PackageEntry."""
+
+    name: str
+    target_dir: str
+    symlinks: list[SymlinkDict]
+    installed_at: str
 
 
 @dataclass
@@ -52,7 +68,7 @@ class PackageEntry:
     symlinks: list[Symlink]  # Symlinks that were created
     installed_at: str  # UTC ISO 8601 timestamp
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> PackageEntryDict:
         """Convert to JSON-serializable dict."""
         return {
             "name": self.name,
@@ -68,7 +84,7 @@ class PackageEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Self:
+    def from_dict(cls, data: PackageEntryDict) -> Self:
         """Create from dict loaded from JSON."""
         return cls(
             name=data["name"],
@@ -84,14 +100,52 @@ class PackageEntry:
         )
 
 
-class ConflictType(Enum):
-    """Type of conflict encountered."""
+@dataclass
+class FileConflict:
+    """Conflict with a regular file."""
 
-    FILE = auto()
-    DIRECTORY = auto()
-    CORRECT_SYMLINK = auto()
-    DIFFERENT_SYMLINK = auto()
-    BROKEN_SYMLINK = auto()
+    path: Path
+
+
+@dataclass
+class DirectoryConflict:
+    """Conflict with a directory."""
+
+    path: Path
+
+
+@dataclass
+class CorrectSymlinkConflict:
+    """Conflict with a symlink that points to the correct target."""
+
+    path: Path
+    points_to: Path  # Where the symlink currently points (relative)
+
+
+@dataclass
+class BrokenSymlinkConflict:
+    """Conflict with a broken symlink."""
+
+    path: Path
+    points_to: Path  # Where the symlink points (relative, but target doesn't exist)
+
+
+@dataclass
+class DifferentSymlinkConflict:
+    """Conflict with a symlink pointing to a different target."""
+
+    path: Path
+    points_to: Path  # Where the symlink currently points (relative)
+
+
+# Union type for all conflict types
+Conflict = (
+    FileConflict
+    | DirectoryConflict
+    | CorrectSymlinkConflict
+    | BrokenSymlinkConflict
+    | DifferentSymlinkConflict
+)
 
 
 class ConflictMode(str, Enum):
@@ -103,15 +157,6 @@ class ConflictMode(str, Enum):
 
 
 @dataclass
-class ConflictInfo:
-    """Information about a file that conflicts with installation."""
-
-    path: Path  # Full path to conflicting file in target
-    type: ConflictType  # Type of conflict
-    points_to: Path | None  # Where symlink points (only for SYMLINK type)
-
-
-@dataclass
 class InstallPlan:
     """Plan for what an install operation would do."""
 
@@ -119,7 +164,7 @@ class InstallPlan:
     package_dir: Path
     target_dir: Path
     symlinks_to_create: list[Symlink]
-    conflicts: list[ConflictInfo]
+    conflicts: list[Conflict]
 
 
 @dataclass
