@@ -36,3 +36,26 @@ def normalize_target_dir(target_dir: Path) -> Path:
         Absolute path to target directory
     """
     return target_dir.resolve()
+
+
+def validate_install_directories(package_dir: Path, target_dir: Path) -> None:
+    """Validate that package and target directories have a valid relationship.
+
+    Args:
+        package_dir: Normalized package directory (must be absolute)
+        target_dir: Normalized target directory (must be absolute)
+
+    Raises:
+        ValueError: If package_dir is /, or if target_dir equals or is inside package_dir
+    """
+    if package_dir == Path("/"):
+        raise ValueError("Package directory cannot be filesystem root (/)")
+    if package_dir == target_dir:
+        raise ValueError(
+            f"Package directory and target directory cannot be the same: {package_dir}"
+        )
+    if target_dir.is_relative_to(package_dir):
+        raise ValueError(
+            f"Target directory cannot be inside package directory: "
+            f"target={target_dir}, package={package_dir}"
+        )

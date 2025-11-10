@@ -6,6 +6,7 @@ import pytest
 
 from haunt.operations import normalize_package_dir
 from haunt.operations import normalize_target_dir
+from haunt.operations.paths import validate_install_directories
 
 
 class TestNormalizePackageDir:
@@ -86,3 +87,41 @@ class TestNormalizeTargetDir:
         result = normalize_target_dir(nonexistent)
 
         assert result.is_absolute()
+
+
+class TestValidateInstallDirectories:
+    """Tests for validate_install_directories()."""
+
+    def test_raises_when_package_is_root(self, tmp_path):
+        """Test that package directory cannot be filesystem root."""
+        target_dir = tmp_path / "target"
+
+        with pytest.raises(
+            ValueError, match="Package directory cannot be filesystem root"
+        ):
+            validate_install_directories(Path("/"), target_dir)
+
+    def test_raises_when_target_equals_package(self, tmp_path):
+        """Test that target and package directories cannot be the same."""
+        package_dir = tmp_path / "package"
+
+        with pytest.raises(ValueError, match="cannot be the same"):
+            validate_install_directories(package_dir, package_dir)
+
+    def test_raises_when_target_inside_package(self, tmp_path):
+        """Test that target directory cannot be inside package directory."""
+        package_dir = tmp_path / "package"
+        target_dir = package_dir / "subdir"
+
+        with pytest.raises(
+            ValueError, match="Target directory cannot be inside package directory"
+        ):
+            validate_install_directories(package_dir, target_dir)
+
+    def test_valid_directories_do_not_raise(self, tmp_path):
+        """Test that valid directory configurations do not raise."""
+        package_dir = tmp_path / "package"
+        target_dir = tmp_path / "target"
+
+        # Should not raise
+        validate_install_directories(package_dir, target_dir)
