@@ -99,7 +99,7 @@ wheels = [
 
 [[package]]
 name = "haunt"
-version = "0.1.1"
+version = "0.2.0.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "platformdirs" },

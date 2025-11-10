@@ -93,6 +93,47 @@ GitHub Actions will run on all PRs:
 
 All checks must pass before merging.
 
+## Releases
+
+Releases are managed through git tags and GitHub Releases. The version is maintained in `pyproject.toml` only (single source of truth).
+
+### Version Format
+
+Between releases, the version uses PEP 440 dev format (e.g., `0.2.0.dev0`). This indicates unreleased code.
+
+### Release Process
+
+1. **Remove the `.dev0` suffix:**
+   ```bash
+   # Edit pyproject.toml: version = "0.2.0.dev0" → version = "0.2.0"
+   git add pyproject.toml
+   git commit -m "Release v0.2.0"
+   git push
+   ```
+
+2. **Tag and push the release:**
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. **Create GitHub Release:**
+   - Go to https://github.com/mikepqr/haunt/releases/new
+   - Select the tag you just pushed
+   - Publish the release
+
+   This triggers the GitHub Action that builds and publishes to PyPI.
+
+4. **Bump to next dev version:**
+   ```bash
+   # Edit pyproject.toml: version = "0.2.0" → version = "0.2.1.dev0"
+   git add pyproject.toml
+   git commit -m "Bump to v0.2.1.dev0"
+   git push
+   ```
+
+The GitHub Action will fail if you try to release a dev version.
+
 ## Questions?
 
 Open an issue at https://github.com/mikepqr/haunt/issues
