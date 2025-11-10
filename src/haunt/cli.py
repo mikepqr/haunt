@@ -6,6 +6,7 @@ from typing import Optional
 import typer
 from typing_extensions import Annotated
 
+from haunt import __version__
 from haunt.exceptions import ConflictError
 from haunt.exceptions import HauntError
 from haunt.exceptions import PackageAlreadyInstalledError
@@ -23,6 +24,26 @@ from haunt.output import print_uninstall_plan
 from haunt.registry import Registry
 
 app = typer.Typer(help="Symlink dotfiles manager")
+
+
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo(f"haunt {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main_callback(
+    version: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--version", callback=version_callback, is_eager=True, help="Show version"
+        ),
+    ] = None,
+) -> None:
+    """Symlink dotfiles manager."""
+    pass
 
 
 @app.command()
