@@ -97,6 +97,9 @@ def install(
             err=True,
         )
         raise typer.Exit(1)
+    except ValueError as e:
+        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
+        raise typer.Exit(1)
     except OSError as e:
         typer.secho(
             f"✗ Filesystem error: {e}", fg=typer.colors.RED, bold=True, err=True

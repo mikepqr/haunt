@@ -18,6 +18,7 @@ from haunt.models import PackageEntry
 from haunt.models import Symlink
 from haunt.operations.paths import normalize_package_dir
 from haunt.operations.paths import normalize_target_dir
+from haunt.operations.paths import validate_install_directories
 from haunt.registry import Registry
 
 
@@ -39,10 +40,14 @@ def compute_install_plan(
     Raises:
         FileNotFoundError: If package_dir does not exist
         NotADirectoryError: If package_dir is not a directory
+        ValueError: If package_dir is /, or if target_dir equals or is inside package_dir
     """
     # Normalize paths to absolute
     package_dir = normalize_package_dir(package_dir)
     target_dir = normalize_target_dir(target_dir)
+
+    # Validate directory relationships
+    validate_install_directories(package_dir, target_dir)
 
     package_name = package_dir.name
     symlinks_to_create: list[Symlink] = []
