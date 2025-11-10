@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from haunt.exceptions import ConflictError
+from haunt.exceptions import PackageAlreadyInstalledError
 from haunt.models import ConflictMode
 from haunt.models import CorrectSymlinkConflict
 from haunt.models import DifferentSymlinkConflict
@@ -62,7 +63,7 @@ class TestComputeInstallPlan:
 
         plan = compute_install_plan(package_dir, target_dir)
 
-        assert plan.package_name == "package"
+        assert plan.package_name == package_dir.name
         assert plan.package_dir == package_dir
         assert plan.target_dir == target_dir
         assert len(plan.symlinks_to_create) == 2
@@ -515,3 +516,70 @@ class TestExecuteInstallPlan:
         # Registry should still be updated
         registry = Registry.load(registry_path)
         assert "test-package" in registry.packages
+
+    def test_raises_for_package_name_collision(self, tmp_path):
+        """Test that installing a package with the same name from different path raises error."""
+        # Two different package directories with the same basename
+        package_dir1 = tmp_path / "dotfiles1" / "shell"
+        package_dir2 = tmp_path / "dotfiles2" / "shell"
+        target_dir = tmp_path / "target"
+        registry_path = tmp_path / "registry.json"
+
+        # Install first package
+        plan1 = InstallPlan(
+            package_name="shell",
+            package_dir=package_dir1,
+            target_dir=target_dir,
+            symlinks_to_create=[],
+            conflicts=[],
+        )
+        execute_install_plan(plan1, registry_path)
+
+        # Try to install second package with same name but different path
+        plan2 = InstallPlan(
+            package_name="shell",
+            package_dir=package_dir2,
+            target_dir=target_dir,
+            symlinks_to_create=[],
+            conflicts=[],
+        )
+
+        with pytest.raises(PackageAlreadyInstalledError) as exc_info:
+            execute_install_plan(plan2, registry_path)
+
+        # Check error details
+        error = exc_info.value
+        assert error.package_name == "shell"
+        assert error.existing_path == str(package_dir1)
+        assert error.new_path == str(package_dir2)
+
+    def test_allows_reinstall_from_same_path(self, tmp_path):
+        """Test that reinstalling a package from the same path is allowed (idempotent)."""
+        package_dir = tmp_path / "package"
+        target_dir = tmp_path / "target"
+        registry_path = tmp_path / "registry.json"
+
+        # Install package
+        plan1 = InstallPlan(
+            package_name="package",
+            package_dir=package_dir,
+            target_dir=target_dir,
+            symlinks_to_create=[],
+            conflicts=[],
+        )
+        execute_install_plan(plan1, registry_path)
+
+        # Reinstall from same path - should not raise
+        plan2 = InstallPlan(
+            package_name="package",
+            package_dir=package_dir,
+            target_dir=target_dir,
+            symlinks_to_create=[],
+            conflicts=[],
+        )
+        execute_install_plan(plan2, registry_path)  # Should not raise
+
+        # Registry should still have the package
+        registry = Registry.load(registry_path)
+        assert "package" in registry.packages
+        assert registry.packages["package"].package_dir == package_dir

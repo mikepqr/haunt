@@ -120,12 +120,22 @@ def print_uninstall_plan(plan: UninstallPlan, dry_run: bool = False) -> None:
             link_display = _display_path(missing_path)
             typer.secho(f"  {link_display}", fg=typer.colors.BRIGHT_BLACK)
 
+    # Show modified symlinks (exist but point to wrong target)
+    if plan.modified_symlinks:
+        typer.secho("Skipped (modified):", fg=typer.colors.BRIGHT_BLACK)
+        for symlink in plan.modified_symlinks:
+            link_display = _display_path(symlink.link_path)
+            typer.secho(f"  {link_display}", fg=typer.colors.BRIGHT_BLACK)
+
     # Summary line
     num_removed = len(plan.symlinks_to_remove)
     parts = [f"{num_removed} symlink{'s' if num_removed != 1 else ''} {past_verb}"]
     if plan.missing_symlinks:
         num_missing = len(plan.missing_symlinks)
         parts.append(f"{num_missing} missing")
+    if plan.modified_symlinks:
+        num_modified = len(plan.modified_symlinks)
+        parts.append(f"{num_modified} skipped (modified)")
 
     summary = ", ".join(parts)
     action = "Would uninstall" if dry_run else "Uninstalled"

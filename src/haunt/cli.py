@@ -8,6 +8,7 @@ from typing_extensions import Annotated
 
 from haunt.exceptions import ConflictError
 from haunt.exceptions import HauntError
+from haunt.exceptions import PackageAlreadyInstalledError
 from haunt.exceptions import PackageNotFoundError
 from haunt.exceptions import RegistryValidationError
 from haunt.exceptions import RegistryVersionError
@@ -49,6 +50,9 @@ def install(
 
         if not dry_run:
             execute_install_plan(plan, Registry.default_path(), on_conflict=on_conflict)
+    except PackageAlreadyInstalledError as e:
+        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
+        raise typer.Exit(1)
     except ConflictError as e:
         print_conflict_error(e, on_conflict)
         raise typer.Exit(1)

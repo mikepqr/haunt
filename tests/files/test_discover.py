@@ -134,3 +134,46 @@ class TestDiscoverFiles:
         files = discover_files(package_dir)
 
         assert Path("link.txt") in files
+
+    def test_discover_symlinks_to_directories_without_traversal(self, tmp_path):
+        """Test that symlinks to directories are discovered but not traversed."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
+
+        # Create directory outside package with a file inside
+        external_dir = tmp_path / "external"
+        external_dir.mkdir()
+        (external_dir / "inside.txt").touch()
+
+        # Create symlink to directory in package
+        (package_dir / "dir_link").symlink_to(external_dir)
+        (package_dir / "normal.txt").touch()
+
+        files = discover_files(package_dir)
+
+        # Symlink to directory should be discovered
+        assert Path("dir_link") in files
+        assert Path("normal.txt") in files
+        # But file inside linked directory should NOT be discovered
+        assert Path("dir_link/inside.txt") not in files
+        assert len(files) == 2
+
+    def test_discover_symlink_and_target_in_same_package(self, tmp_path):
+        """Test that both symlink and its target are discovered when both are in package."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
+
+        # Create a regular file in package
+        target_file = package_dir / ".bash_profile"
+        target_file.touch()
+
+        # Create symlink pointing to it within same package
+        link_file = package_dir / ".bashrc"
+        link_file.symlink_to(".bash_profile")
+
+        files = discover_files(package_dir)
+
+        # Both the symlink and its target should be discovered
+        assert Path(".bashrc") in files
+        assert Path(".bash_profile") in files
+        assert len(files) == 2

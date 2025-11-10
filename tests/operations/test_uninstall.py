@@ -20,23 +20,26 @@ class TestComputeUninstallPlan:
 
     def test_simple_uninstall(self, tmp_path):
         """Test planning uninstall for a simple package."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
 
         # Create registry with package
         registry = Registry()
-        registry.packages["test-package"] = PackageEntry(
-            name="test-package",
+        registry.packages[package_dir.name] = PackageEntry(
+            name=package_dir.name,
+            package_dir=package_dir,
             target_dir=target_dir,
             symlinks=[
                 Symlink(
                     link_path=target_dir / "file1.txt",
-                    source_path=tmp_path / "package" / "file1.txt",
+                    source_path=package_dir / "file1.txt",
                 ),
                 Symlink(
                     link_path=target_dir / "file2.txt",
-                    source_path=tmp_path / "package" / "file2.txt",
+                    source_path=package_dir / "file2.txt",
                 ),
             ],
             installed_at="2025-01-01T00:00:00Z",
@@ -47,12 +50,13 @@ class TestComputeUninstallPlan:
         (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
         (target_dir / "file2.txt").symlink_to(Path("../package/file2.txt"))
 
-        plan = compute_uninstall_plan("test-package", registry_path)
+        plan = compute_uninstall_plan(package_dir.name, registry_path)
 
-        assert plan.package_name == "test-package"
+        assert plan.package_name == package_dir.name
         assert plan.target_dir == target_dir
         assert len(plan.symlinks_to_remove) == 2
         assert len(plan.missing_symlinks) == 0
+        assert len(plan.modified_symlinks) == 0
 
         link_paths = {s.link_path for s in plan.symlinks_to_remove}
         assert target_dir / "file1.txt" in link_paths
@@ -60,23 +64,26 @@ class TestComputeUninstallPlan:
 
     def test_detects_missing_symlinks(self, tmp_path):
         """Test that missing symlinks are reported."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
 
         # Create registry with package
         registry = Registry()
-        registry.packages["test-package"] = PackageEntry(
-            name="test-package",
+        registry.packages[package_dir.name] = PackageEntry(
+            name=package_dir.name,
+            package_dir=package_dir,
             target_dir=target_dir,
             symlinks=[
                 Symlink(
                     link_path=target_dir / "file1.txt",
-                    source_path=tmp_path / "package" / "file1.txt",
+                    source_path=package_dir / "file1.txt",
                 ),
                 Symlink(
                     link_path=target_dir / "file2.txt",
-                    source_path=tmp_path / "package" / "file2.txt",
+                    source_path=package_dir / "file2.txt",
                 ),
             ],
             installed_at="2025-01-01T00:00:00Z",
@@ -86,14 +93,17 @@ class TestComputeUninstallPlan:
         # Only create one symlink
         (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
 
-        plan = compute_uninstall_plan("test-package", registry_path)
+        plan = compute_uninstall_plan(package_dir.name, registry_path)
 
         assert len(plan.symlinks_to_remove) == 1
         assert len(plan.missing_symlinks) == 1
+        assert len(plan.modified_symlinks) == 0
         assert target_dir / "file2.txt" in plan.missing_symlinks
 
     def test_raises_for_unknown_package(self, tmp_path):
         """Test that error is raised for unknown package."""
+        package_dir = tmp_path / "nonexistent"
+        package_dir.mkdir()
         registry_path = tmp_path / "registry.json"
 
         # Create empty registry
@@ -101,25 +111,28 @@ class TestComputeUninstallPlan:
         registry.save(registry_path)
 
         with pytest.raises(PackageNotFoundError) as exc_info:
-            compute_uninstall_plan("nonexistent", registry_path)
+            compute_uninstall_plan(package_dir.name, registry_path)
 
-        assert "nonexistent" in str(exc_info.value)
+        assert package_dir.name in str(exc_info.value)
 
     def test_computes_correct_source_paths(self, tmp_path):
         """Test that symlinks have correct source paths for verification."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
 
         # Create registry with package
         registry = Registry()
-        registry.packages["test-package"] = PackageEntry(
-            name="test-package",
+        registry.packages[package_dir.name] = PackageEntry(
+            name=package_dir.name,
+            package_dir=package_dir,
             target_dir=target_dir,
             symlinks=[
                 Symlink(
                     link_path=target_dir / "bashrc",
-                    source_path=tmp_path / "package" / "bashrc",
+                    source_path=package_dir / "bashrc",
                 ),
             ],
             installed_at="2025-01-01T00:00:00Z",
@@ -129,13 +142,59 @@ class TestComputeUninstallPlan:
         # Create symlink
         (target_dir / "bashrc").symlink_to(Path("../package/bashrc"))
 
-        plan = compute_uninstall_plan("test-package", registry_path)
+        plan = compute_uninstall_plan(package_dir.name, registry_path)
 
         assert len(plan.symlinks_to_remove) == 1
         symlink = plan.symlinks_to_remove[0]
         assert symlink.link_path == target_dir / "bashrc"
         # Source should be absolute path
-        assert symlink.source_path == tmp_path / "package" / "bashrc"
+        assert symlink.source_path == package_dir / "bashrc"
+
+    def test_detects_modified_symlinks(self, tmp_path):
+        """Test that symlinks pointing to wrong targets are detected as modified."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        registry_path = tmp_path / "registry.json"
+
+        # Create registry with package
+        registry = Registry()
+        registry.packages[package_dir.name] = PackageEntry(
+            name=package_dir.name,
+            package_dir=package_dir,
+            target_dir=target_dir,
+            symlinks=[
+                Symlink(
+                    link_path=target_dir / "file1.txt",
+                    source_path=package_dir / "file1.txt",
+                ),
+                Symlink(
+                    link_path=target_dir / "file2.txt",
+                    source_path=package_dir / "file2.txt",
+                ),
+            ],
+            installed_at="2025-01-01T00:00:00Z",
+        )
+        registry.save(registry_path)
+
+        # Create one correct symlink and one modified symlink
+        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
+        # file2.txt points to wrong target (user modified it)
+        (target_dir / "file2.txt").symlink_to(Path("../other/file2.txt"))
+
+        plan = compute_uninstall_plan(package_dir.name, registry_path)
+
+        # Should remove the correct symlink
+        assert len(plan.symlinks_to_remove) == 1
+        assert plan.symlinks_to_remove[0].link_path == target_dir / "file1.txt"
+
+        # Should detect the modified symlink
+        assert len(plan.modified_symlinks) == 1
+        assert plan.modified_symlinks[0].link_path == target_dir / "file2.txt"
+
+        # Should have no missing symlinks
+        assert len(plan.missing_symlinks) == 0
 
 
 class TestExecuteUninstallPlan:
@@ -165,6 +224,7 @@ class TestExecuteUninstallPlan:
                 ),
             ],
             missing_symlinks=[],
+            modified_symlinks=[],
         )
 
         # Mock registry
@@ -203,6 +263,7 @@ class TestExecuteUninstallPlan:
                 ),
             ],
             missing_symlinks=[],
+            modified_symlinks=[],
         )
 
         # Mock registry
@@ -237,6 +298,7 @@ class TestExecuteUninstallPlan:
                 target_dir=tmp_path / "target",
                 symlinks_to_remove=[],
                 missing_symlinks=[],
+                modified_symlinks=[],
             )
 
             execute_uninstall_plan(plan, registry_path)
@@ -264,6 +326,7 @@ class TestExecuteUninstallPlan:
                 ),
             ],
             missing_symlinks=["file2.txt"],
+            modified_symlinks=[],
         )
 
         # Mock registry

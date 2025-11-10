@@ -18,6 +18,7 @@ class PackageEntryDict(TypedDict):
     """JSON-serializable representation of a PackageEntry."""
 
     name: str
+    package_dir: str
     target_dir: str
     symlinks: list[SymlinkDict]
     installed_at: str
@@ -64,6 +65,7 @@ class PackageEntry:
     """Record of an installed package in the registry."""
 
     name: str  # Package identifier (basename of package directory)
+    package_dir: Path  # Absolute path to package directory
     target_dir: Path  # Where symlinks were installed
     symlinks: list[Symlink]  # Symlinks that were created
     installed_at: str  # UTC ISO 8601 timestamp
@@ -72,6 +74,7 @@ class PackageEntry:
         """Convert to JSON-serializable dict."""
         return {
             "name": self.name,
+            "package_dir": str(self.package_dir),
             "target_dir": str(self.target_dir),
             "symlinks": [
                 {
@@ -88,6 +91,7 @@ class PackageEntry:
         """Create from dict loaded from JSON."""
         return cls(
             name=data["name"],
+            package_dir=Path(data["package_dir"]),
             target_dir=Path(data["target_dir"]),
             symlinks=[
                 Symlink(
@@ -175,3 +179,4 @@ class UninstallPlan:
     target_dir: Path
     symlinks_to_remove: list[Symlink]
     missing_symlinks: list[Path]  # Absolute paths to symlinks that don't exist
+    modified_symlinks: list[Symlink]  # Symlinks that exist but point to wrong target

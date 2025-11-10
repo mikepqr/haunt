@@ -22,6 +22,7 @@ def compute_uninstall_plan(package_name: str, registry_path: Path) -> UninstallP
     Raises:
         PackageNotFoundError: If package not found in registry
     """
+
     # Load registry and get package entry
     registry = Registry.load(registry_path)
     try:
@@ -31,19 +32,26 @@ def compute_uninstall_plan(package_name: str, registry_path: Path) -> UninstallP
 
     symlinks_to_remove = []
     missing_symlinks = []
+    modified_symlinks = []
 
     for symlink in entry.symlinks:
-        # Check if symlink exists
-        if symlink.link_path.exists(follow_symlinks=False):
+        # Check if symlink exists at the expected path
+        if not symlink.link_path.exists(follow_symlinks=False):
+            # Symlink doesn't exist at all
+            missing_symlinks.append(symlink.link_path)
+        elif symlink.exists():
+            # Symlink exists and points to expected target
             symlinks_to_remove.append(symlink)
         else:
-            missing_symlinks.append(symlink.link_path)
+            # Symlink exists but points to wrong target (user modified it)
+            modified_symlinks.append(symlink)
 
     return UninstallPlan(
         package_name=package_name,
         target_dir=entry.target_dir,
         symlinks_to_remove=symlinks_to_remove,
         missing_symlinks=missing_symlinks,
+        modified_symlinks=modified_symlinks,
     )
 
 

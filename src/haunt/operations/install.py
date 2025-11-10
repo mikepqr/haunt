@@ -5,6 +5,7 @@ from datetime import timezone
 from pathlib import Path
 
 from haunt.exceptions import ConflictError
+from haunt.exceptions import PackageAlreadyInstalledError
 from haunt.files import check_conflict
 from haunt.files import create_symlink
 from haunt.files import discover_files
@@ -100,9 +101,21 @@ def execute_install_plan(
         on_conflict: How to handle conflicts (determines if force=True is used)
 
     Raises:
+        PackageAlreadyInstalledError: If package name exists from different directory
         ConflictError: If directory conflicts exist (never replaceable)
         ConflictError: If on_conflict=ABORT and blocking conflicts exist
     """
+    # Check for package name uniqueness
+    registry = Registry.load(registry_path)
+    if plan.package_name in registry.packages:
+        existing_entry = registry.packages[plan.package_name]
+        if existing_entry.package_dir != plan.package_dir:
+            raise PackageAlreadyInstalledError(
+                package_name=plan.package_name,
+                existing_path=str(existing_entry.package_dir),
+                new_path=str(plan.package_dir),
+            )
+
     # Check for directory conflicts - these always block regardless of mode
     directory_conflicts = [
         c for c in plan.conflicts if isinstance(c, DirectoryConflict)
@@ -137,12 +150,12 @@ def execute_install_plan(
     # Create package entry
     entry = PackageEntry(
         name=plan.package_name,
+        package_dir=plan.package_dir,
         target_dir=plan.target_dir,
         symlinks=all_symlinks,
         installed_at=datetime.now(timezone.utc).isoformat(),
     )
 
-    # Update registry
-    registry = Registry.load(registry_path)
+    # Update registry (reuse registry loaded earlier)
     registry.packages[plan.package_name] = entry
     registry.save(registry_path)

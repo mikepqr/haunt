@@ -40,6 +40,7 @@ def dotfiles_entry():
     """A standard dotfiles package entry for testing."""
     return PackageEntry(
         name="dotfiles",
+        package_dir=Path("/home/user/dotfiles"),
         target_dir=Path("/home/user"),
         symlinks=[
             Symlink(
@@ -60,6 +61,7 @@ def nvim_entry():
     """A standard nvim package entry for testing."""
     return PackageEntry(
         name="nvim",
+        package_dir=Path("/home/user/nvim-config"),
         target_dir=Path("/home/user"),
         symlinks=[
             Symlink(
