@@ -39,10 +39,6 @@ class ConflictError(HauntError):
         super().__init__(f"Conflicts detected: {conflict_paths}")
 
 
-class InvalidPackageError(HauntError):
-    """Package directory is invalid (empty, paths escape target, etc.)."""
-
-
 class RegistryValidationError(HauntError):
     """Registry file is invalid or malformed."""
 
