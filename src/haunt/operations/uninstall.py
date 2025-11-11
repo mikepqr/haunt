@@ -27,8 +27,10 @@ def compute_uninstall_plan(package_name: str, registry_path: Path) -> UninstallP
     registry = Registry.load(registry_path)
     try:
         entry = registry.packages[package_name]
-    except KeyError:
-        raise PackageNotFoundError(f"Package '{package_name}' not found in registry")
+    except KeyError as e:
+        raise PackageNotFoundError(
+            f"Package '{package_name}' not found in registry"
+        ) from e
 
     symlinks_to_remove = []
     missing_symlinks = []

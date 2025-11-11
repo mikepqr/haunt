@@ -213,7 +213,7 @@ class TestComputeInstallPlan:
         assert plan.symlinks_to_create[0].link_path == target_dir / "file1.txt"
 
     def test_force_mode_does_not_include_directory_conflicts(self, tmp_path):
-        """Test that FORCE mode does NOT include directory conflicts in symlinks_to_create."""
+        """Test FORCE mode excludes directory conflicts from symlinks."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         (package_dir / "file1.txt").write_text("new")
@@ -518,7 +518,7 @@ class TestExecuteInstallPlan:
         assert "test-package" in registry.packages
 
     def test_raises_for_package_name_collision(self, tmp_path):
-        """Test that installing a package with the same name from different path raises error."""
+        """Test installing package with same name from different path raises."""
         # Two different package directories with the same basename
         package_dir1 = tmp_path / "dotfiles1" / "shell"
         package_dir2 = tmp_path / "dotfiles2" / "shell"
@@ -554,7 +554,7 @@ class TestExecuteInstallPlan:
         assert error.new_path == str(package_dir2)
 
     def test_allows_reinstall_from_same_path(self, tmp_path):
-        """Test that reinstalling a package from the same path is allowed (idempotent)."""
+        """Test reinstalling package from same path is allowed (idempotent)."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         registry_path = tmp_path / "registry.json"

@@ -26,8 +26,8 @@ def remove_empty_directories(target_dir: Path, file_paths: list[Path]) -> list[P
         # Validate that file_path is under target_dir
         try:
             file_path.relative_to(target_dir)
-        except ValueError:
-            raise ValueError(f"{file_path} is not under {target_dir}")
+        except ValueError as e:
+            raise ValueError(f"{file_path} is not under {target_dir}") from e
 
         # Get the parent directory of this file
         current = file_path.parent

@@ -46,7 +46,8 @@ def validate_install_directories(package_dir: Path, target_dir: Path) -> None:
         target_dir: Normalized target directory (must be absolute)
 
     Raises:
-        ValueError: If package_dir is /, or if target_dir equals or is inside package_dir
+        ValueError: If package_dir is /, or if target_dir equals or is inside
+            package_dir
     """
     if package_dir == Path("/"):
         raise ValueError("Package directory cannot be filesystem root (/)")

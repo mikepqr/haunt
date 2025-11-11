@@ -82,14 +82,16 @@ def create_symlink(symlink: Symlink, force: bool = False) -> None:
 
     Raises:
         IsADirectoryError: If force=True and link_path is a directory
-        FileExistsError: If something exists at link_path (filesystem changed after planning)
+        FileExistsError: If something exists at link_path (filesystem changed
+            after planning)
     """
     if symlink.exists():
         return
 
     # In force mode, remove existing files/symlinks (but not directories)
     if force:
-        # Check if it's a real directory (is_dir follows symlinks, so we need both checks)
+        # Check if it's a real directory (is_dir follows symlinks, so we need
+        # both checks)
         if symlink.link_path.is_dir() and not symlink.link_path.is_symlink():
             raise IsADirectoryError(
                 f"Cannot force-create symlink: {symlink.link_path} is a directory"

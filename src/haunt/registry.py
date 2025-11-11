@@ -54,7 +54,8 @@ class Registry:
         version = data["version"]
         if version > REGISTRY_VERSION:
             raise RegistryVersionError(
-                f"Registry version {version} is newer than supported version {REGISTRY_VERSION}"
+                f"Registry version {version} is newer than supported version "
+                f"{REGISTRY_VERSION}"
             )
 
         if "packages" not in data:
@@ -83,9 +84,11 @@ class Registry:
             data = json.loads(path.read_text())
             return cls.from_dict(data)
         except json.JSONDecodeError as e:
-            raise RegistryValidationError(f"Invalid JSON in registry: {e}")
+            raise RegistryValidationError(f"Invalid JSON in registry: {e}") from e
         except KeyError as e:
-            raise RegistryValidationError(f"Missing required field in registry: {e}")
+            raise RegistryValidationError(
+                f"Missing required field in registry: {e}"
+            ) from e
 
     def save(self, path: Path | None = None) -> None:
         """Save registry to JSON file atomically.

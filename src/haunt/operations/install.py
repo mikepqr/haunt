@@ -1,7 +1,7 @@
 """High-level operations for install and uninstall."""
 
+from datetime import UTC
 from datetime import datetime
-from datetime import timezone
 from pathlib import Path
 
 from haunt.exceptions import ConflictError
@@ -28,8 +28,10 @@ def compute_install_plan(
     """Compute a plan for installing a package.
 
     Args:
-        package_dir: Directory containing files to symlink (will be resolved to absolute)
-        target_dir: Directory where symlinks will be created (will be resolved to absolute)
+        package_dir: Directory containing files to symlink (will be resolved
+            to absolute)
+        target_dir: Directory where symlinks will be created (will be
+            resolved to absolute)
         on_conflict: How to handle conflicts (ABORT, SKIP, or FORCE)
 
     Returns:
@@ -40,7 +42,8 @@ def compute_install_plan(
     Raises:
         FileNotFoundError: If package_dir does not exist
         NotADirectoryError: If package_dir is not a directory
-        ValueError: If package_dir is /, or if target_dir equals or is inside package_dir
+        ValueError: If package_dir is /, or if target_dir equals or is inside
+            package_dir
     """
     # Normalize paths to absolute
     package_dir = normalize_package_dir(package_dir)
@@ -158,7 +161,7 @@ def execute_install_plan(
         package_dir=plan.package_dir,
         target_dir=plan.target_dir,
         symlinks=all_symlinks,
-        installed_at=datetime.now(timezone.utc).isoformat(),
+        installed_at=datetime.now(UTC).isoformat(),
     )
 
     # Update registry (reuse registry loaded earlier)
