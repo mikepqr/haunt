@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from haunt.files import discover_files
 
 
@@ -159,7 +158,7 @@ class TestDiscoverFiles:
         assert len(files) == 2
 
     def test_discover_symlink_and_target_in_same_package(self, tmp_path):
-        """Test that both symlink and its target are discovered when both are in package."""
+        """Test that both symlink and target are discovered when in package."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
 

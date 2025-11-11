@@ -14,7 +14,7 @@ def discover_files(package_dir: Path) -> list[Path]:
         registry output (makes diffs/version control cleaner).
     """
     files = []
-    for dirpath, dirnames, filenames in package_dir.walk():
+    for dirpath, _dirnames, filenames in package_dir.walk():
         for filename in filenames:
             full_path = dirpath / filename
             rel_path = full_path.relative_to(package_dir)

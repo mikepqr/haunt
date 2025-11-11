@@ -45,9 +45,14 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--cov=src", "--cov-report=term-missing"]
 
 [tool.ruff]
 line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C4", "UP"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
