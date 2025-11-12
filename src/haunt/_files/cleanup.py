@@ -39,7 +39,6 @@ def remove_empty_directories(target_dir: Path, file_paths: list[Path]) -> list[P
                 break
             checked.add(current)
 
-            # Skip if directory doesn't exist
             if not current.exists():
                 break
 
@@ -47,7 +46,6 @@ def remove_empty_directories(target_dir: Path, file_paths: list[Path]) -> list[P
             try:
                 current.rmdir()
                 removed.append(current)
-                # Move up to parent
                 current = current.parent
             except OSError:
                 # Directory not empty, stop walking up this branch

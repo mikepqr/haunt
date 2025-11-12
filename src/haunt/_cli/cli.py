@@ -6,6 +6,9 @@ from typing import Annotated
 import typer
 
 from haunt import __version__
+from haunt._cli.output import print_conflict_error
+from haunt._cli.output import print_install_plan
+from haunt._cli.output import print_uninstall_plan
 from haunt.exceptions import ConflictError
 from haunt.exceptions import HauntError
 from haunt.exceptions import PackageAlreadyInstalledError
@@ -13,14 +16,10 @@ from haunt.exceptions import PackageNotFoundError
 from haunt.exceptions import RegistryValidationError
 from haunt.exceptions import RegistryVersionError
 from haunt.models import ConflictMode
-from haunt.operations import compute_install_plan
-from haunt.operations import compute_uninstall_plan
-from haunt.operations import execute_install_plan
-from haunt.operations import execute_uninstall_plan
-from haunt.output import print_conflict_error
-from haunt.output import print_install_plan
-from haunt.output import print_uninstall_plan
-from haunt.registry import Registry
+from haunt.operations import apply_install
+from haunt.operations import apply_uninstall
+from haunt.operations import plan_install
+from haunt.operations import plan_uninstall
 
 app = typer.Typer(help="Symlink dotfiles manager")
 
@@ -65,11 +64,11 @@ def install(
         target = Path.home()
 
     try:
-        plan = compute_install_plan(package, target, on_conflict=on_conflict)
+        plan = plan_install(package, target, on_conflict=on_conflict)
         print_install_plan(plan, on_conflict=on_conflict, dry_run=dry_run)
 
         if not dry_run:
-            execute_install_plan(plan, Registry.default_path(), on_conflict=on_conflict)
+            apply_install(plan, on_conflict=on_conflict)
     except PackageAlreadyInstalledError as e:
         typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
         raise typer.Exit(1) from None
@@ -124,11 +123,11 @@ def uninstall(
 ) -> None:
     """Uninstall a package by removing symlinks."""
     try:
-        plan = compute_uninstall_plan(package, Registry.default_path())
+        plan = plan_uninstall(package)
         print_uninstall_plan(plan, dry_run=dry_run)
 
         if not dry_run:
-            execute_uninstall_plan(plan, Registry.default_path())
+            apply_uninstall(plan)
     except PackageNotFoundError as e:
         typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
         raise typer.Exit(1) from None

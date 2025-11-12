@@ -4,11 +4,15 @@ from datetime import UTC
 from datetime import datetime
 from pathlib import Path
 
+from haunt._files.discover import discover_files
+from haunt._files.paths import normalize_package_dir
+from haunt._files.paths import normalize_target_dir
+from haunt._files.paths import validate_install_directories
+from haunt._files.symlinks import check_conflict
+from haunt._files.symlinks import create_symlink
+from haunt._registry import Registry
 from haunt.exceptions import ConflictError
 from haunt.exceptions import PackageAlreadyInstalledError
-from haunt.files import check_conflict
-from haunt.files import create_symlink
-from haunt.files import discover_files
 from haunt.models import Conflict
 from haunt.models import ConflictMode
 from haunt.models import CorrectSymlinkConflict
@@ -16,16 +20,12 @@ from haunt.models import DirectoryConflict
 from haunt.models import InstallPlan
 from haunt.models import PackageEntry
 from haunt.models import Symlink
-from haunt.operations.paths import normalize_package_dir
-from haunt.operations.paths import normalize_target_dir
-from haunt.operations.paths import validate_install_directories
-from haunt.registry import Registry
 
 
-def compute_install_plan(
+def plan_install(
     package_dir: Path, target_dir: Path, on_conflict: ConflictMode = ConflictMode.ABORT
 ) -> InstallPlan:
-    """Compute a plan for installing a package.
+    """Plan an install operation.
 
     Args:
         package_dir: Directory containing files to symlink (will be resolved
@@ -45,32 +45,25 @@ def compute_install_plan(
         ValueError: If package_dir is /, or if target_dir equals or is inside
             package_dir
     """
-    # Normalize paths to absolute
     package_dir = normalize_package_dir(package_dir)
     target_dir = normalize_target_dir(target_dir)
-
-    # Validate directory relationships
     validate_install_directories(package_dir, target_dir)
 
     package_name = package_dir.name
     symlinks_to_create: list[Symlink] = []
     conflicts: list[Conflict] = []
 
-    # Discover all files in the package
     files = discover_files(package_dir)
 
     for rel_file_path in files:
-        # Compute paths (both absolute)
         source_path = package_dir / rel_file_path
         link_path = target_dir / rel_file_path
 
-        # Create symlink with absolute paths
         symlink = Symlink(
             link_path=link_path,
             source_path=source_path,
         )
 
-        # Check for conflicts
         conflict = check_conflict(symlink)
         if conflict is None:
             # Nothing exists, always create symlink
@@ -96,16 +89,14 @@ def compute_install_plan(
     )
 
 
-def execute_install_plan(
+def apply_install(
     plan: InstallPlan,
-    registry_path: Path,
     on_conflict: ConflictMode = ConflictMode.ABORT,
 ) -> None:
-    """Execute an install plan by creating symlinks and updating registry.
+    """Apply an install plan by creating symlinks and updating registry.
 
     Args:
         plan: InstallPlan to execute
-        registry_path: Path to registry file
         on_conflict: How to handle conflicts (determines if force=True is used)
 
     Raises:
@@ -114,7 +105,7 @@ def execute_install_plan(
         ConflictError: If on_conflict=ABORT and blocking conflicts exist
     """
     # Check for package name uniqueness
-    registry = Registry.load(registry_path)
+    registry = Registry()
     if plan.package_name in registry.packages:
         existing_entry = registry.packages[plan.package_name]
         if existing_entry.package_dir != plan.package_dir:
@@ -155,7 +146,6 @@ def execute_install_plan(
                 Symlink(link_path=conflict.path, source_path=absolute_source)
             )
 
-    # Create package entry
     entry = PackageEntry(
         name=plan.package_name,
         package_dir=plan.package_dir,
@@ -164,6 +154,5 @@ def execute_install_plan(
         installed_at=datetime.now(UTC).isoformat(),
     )
 
-    # Update registry (reuse registry loaded earlier)
     registry.packages[plan.package_name] = entry
-    registry.save(registry_path)
+    registry.save()

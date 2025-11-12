@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from haunt._files.paths import validate_install_directories
 from haunt.operations import normalize_package_dir
 from haunt.operations import normalize_target_dir
-from haunt.operations.paths import validate_install_directories
 
 
 class TestNormalizePackageDir:
