@@ -8,7 +8,9 @@ import typer
 from haunt import __version__
 from haunt._cli.output import print_conflict_error
 from haunt._cli.output import print_install_plan
+from haunt._cli.output import print_package_list
 from haunt._cli.output import print_uninstall_plan
+from haunt._registry import Registry
 from haunt.exceptions import ConflictError
 from haunt.exceptions import HauntError
 from haunt.exceptions import PackageAlreadyInstalledError
@@ -108,6 +110,32 @@ def install(
             "filesystem and registry manually.",
             err=True,
         )
+        raise typer.Exit(1) from None
+    except HauntError as e:
+        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, bold=True, err=True)
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def list(
+    package: Annotated[
+        str | None,
+        typer.Argument(help="Show only this package (optional)"),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Show all symlinks with status"),
+    ] = False,
+) -> None:
+    """List installed packages."""
+    try:
+        registry = Registry()
+        print_package_list(registry, package_name=package, verbose=verbose)
+    except PackageNotFoundError as e:
+        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
+        raise typer.Exit(1) from None
+    except (RegistryValidationError, RegistryVersionError) as e:
+        typer.secho(f"✗ Registry error: {e}", fg=typer.colors.RED, bold=True, err=True)
         raise typer.Exit(1) from None
     except HauntError as e:
         typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, bold=True, err=True)

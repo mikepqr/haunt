@@ -84,6 +84,99 @@ class TestSymlink:
         # Should resolve through the symlink
         assert symlink.points_to(Path("../real_package/file.txt"))
 
+    def test_is_missing_when_link_doesnt_exist(self, tmp_path):
+        """Test is_missing returns True when link doesn't exist."""
+        link_path = tmp_path / "nonexistent.txt"
+        source_path = tmp_path / "source.txt"
+
+        symlink = Symlink(link_path=link_path, source_path=source_path)
+
+        assert symlink.is_missing()
+
+    def test_is_missing_returns_false_when_link_exists(self, tmp_path):
+        """Test is_missing returns False when link exists."""
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+        link = tmp_path / "link.txt"
+        link.symlink_to(source)
+
+        symlink = Symlink(link_path=link, source_path=source)
+
+        assert not symlink.is_missing()
+
+    def test_is_modified_when_link_points_wrong(self, tmp_path):
+        """Test is_modified returns True when link points to wrong target."""
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+        other = tmp_path / "other.txt"
+        other.write_text("other")
+        link = tmp_path / "link.txt"
+        link.symlink_to(other)  # Point to other, not source
+
+        symlink = Symlink(link_path=link, source_path=source)
+
+        assert symlink.is_modified()
+
+    def test_is_modified_returns_false_when_correct(self, tmp_path):
+        """Test is_modified returns False when link is correct."""
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+        link = tmp_path / "link.txt"
+        link.symlink_to(source)
+
+        symlink = Symlink(link_path=link, source_path=source)
+
+        assert not symlink.is_modified()
+
+    def test_is_modified_returns_false_when_missing(self, tmp_path):
+        """Test is_modified returns False when link doesn't exist."""
+        link_path = tmp_path / "nonexistent.txt"
+        source_path = tmp_path / "source.txt"
+
+        symlink = Symlink(link_path=link_path, source_path=source_path)
+
+        assert not symlink.is_modified()
+
+    def test_source_exists_when_file_exists(self, tmp_path):
+        """Test source_exists returns True when source file exists."""
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+        link_path = tmp_path / "link.txt"
+
+        symlink = Symlink(link_path=link_path, source_path=source)
+
+        assert symlink.source_exists()
+
+    def test_source_exists_returns_false_when_missing(self, tmp_path):
+        """Test source_exists returns False when source doesn't exist."""
+        source_path = tmp_path / "nonexistent.txt"
+        link_path = tmp_path / "link.txt"
+
+        symlink = Symlink(link_path=link_path, source_path=source_path)
+
+        assert not symlink.source_exists()
+
+    def test_get_actual_target_returns_target(self, tmp_path):
+        """Test get_actual_target returns the symlink target."""
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+        link = tmp_path / "link.txt"
+        link.symlink_to(source)
+
+        symlink = Symlink(link_path=link, source_path=source)
+
+        assert symlink.get_actual_target() == source
+
+    def test_get_actual_target_returns_none_for_non_symlink(self, tmp_path):
+        """Test get_actual_target returns None for non-symlink."""
+        regular_file = tmp_path / "file.txt"
+        regular_file.write_text("content")
+        source_path = tmp_path / "source.txt"
+
+        symlink = Symlink(link_path=regular_file, source_path=source_path)
+
+        assert symlink.get_actual_target() is None
+
 
 class TestCheckConflict:
     """Tests for check_conflict()."""

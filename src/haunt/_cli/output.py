@@ -1,10 +1,13 @@
 """Output formatting for haunt operations."""
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
 
+from haunt._registry import Registry
 from haunt.exceptions import ConflictError
+from haunt.exceptions import PackageNotFoundError
 from haunt.models import ConflictMode
 from haunt.models import CorrectSymlinkConflict
 from haunt.models import DirectoryConflict
@@ -180,3 +183,115 @@ def _display_path(path: Path) -> str:
     except ValueError:
         # Not under home, return as-is
         return str(path)
+
+
+def print_package_list(
+    registry: Registry,
+    package_name: str | None = None,
+    verbose: bool = False,
+) -> None:
+    """Print list of installed packages with optional filtering.
+
+    Args:
+        registry: Registry containing installed packages
+        package_name: Optional package name to filter to
+        verbose: If True, show all symlinks with status validation
+
+    Raises:
+        PackageNotFoundError: If package_name specified but not found
+    """
+    if package_name:
+        if package_name not in registry.packages:
+            raise PackageNotFoundError(
+                f"Package '{package_name}' not found in registry"
+            )
+        packages_to_show = {package_name: registry.packages[package_name]}
+    else:
+        packages_to_show = registry.packages
+
+    if not packages_to_show:
+        typer.secho("No packages installed", fg=typer.colors.BRIGHT_BLACK)
+        return
+
+    for name, entry in packages_to_show.items():
+        typer.secho(name, bold=True)
+
+        package_display = _display_path(entry.package_dir)
+        typer.echo(f"  Package: {package_display}")
+
+        target_display = _display_path(entry.target_dir)
+        typer.echo(f"  Target: {target_display}")
+
+        try:
+            dt = datetime.fromisoformat(entry.installed_at)
+            local_dt = dt.astimezone()
+            timestamp = local_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, AttributeError):
+            timestamp = entry.installed_at
+        typer.echo(f"  Installed: {timestamp}")
+
+        if not verbose:
+            count = len(entry.symlinks)
+            typer.echo(f"  Symlinks: {count}")
+        else:
+            correct_symlinks = []
+            inconsistent_symlinks = []
+
+            for symlink in entry.symlinks:
+                link_display = _display_path(symlink.link_path)
+                source_display = _display_path(symlink.source_path)
+
+                if symlink.is_missing():
+                    inconsistent_symlinks.append(
+                        (
+                            f"{link_display} -> {source_display} (link missing)",
+                            typer.colors.RED,
+                        )
+                    )
+                elif symlink.is_modified():
+                    actual = symlink.get_actual_target()
+                    if actual:
+                        actual_display = _display_path(actual)
+                        inconsistent_symlinks.append(
+                            (
+                                f"{link_display} -> {actual_display} "
+                                f"(expected {source_display})",
+                                typer.colors.YELLOW,
+                            )
+                        )
+                    else:
+                        inconsistent_symlinks.append(
+                            (f"{link_display} (not a symlink)", typer.colors.RED)
+                        )
+                elif not symlink.source_exists():
+                    inconsistent_symlinks.append(
+                        (
+                            f"{link_display} -> {source_display} (source file missing)",
+                            typer.colors.YELLOW,
+                        )
+                    )
+                else:
+                    correct_symlinks.append(f"{link_display} -> {source_display}")
+
+            typer.echo("  Symlinks:")
+
+            if correct_symlinks:
+                typer.echo("    Correct:")
+                for symlink_str in correct_symlinks:
+                    typer.secho(f"      {symlink_str}", fg=typer.colors.BRIGHT_BLACK)
+
+            if inconsistent_symlinks:
+                typer.echo("    Inconsistent with Registry:")
+                for symlink_str, color in inconsistent_symlinks:
+                    typer.secho(f"      {symlink_str}", fg=color)
+
+                package_dir_display = _display_path(entry.package_dir)
+                target_dir_display = _display_path(entry.target_dir)
+                typer.echo()
+                typer.secho("  To fix inconsistent symlinks:", fg=typer.colors.YELLOW)
+                typer.secho(
+                    f"    haunt install {package_dir_display} {target_dir_display}",
+                    fg=typer.colors.YELLOW,
+                )
+
+        typer.echo()
