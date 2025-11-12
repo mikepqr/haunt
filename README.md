@@ -96,6 +96,59 @@ haunt uninstall [OPTIONS] PACKAGE
 - `PACKAGE` - package name to uninstall (required)
 - `--dry-run, -n` - show what would happen without doing it
 
+### `haunt list`
+
+```bash
+haunt list [OPTIONS] [PACKAGE]
+```
+
+List installed packages with their symlinks.
+
+- `PACKAGE` - show only this package (optional, shows all if omitted)
+- `--verbose, -v` - show all symlinks with status validation
+
+**Example output:**
+
+```bash
+$ haunt list
+dotfiles
+  Package: ~/dotfiles
+  Target: ~/
+  Installed: 2025-11-12 13:45:23
+  Symlinks: 3
+
+nvim-config
+  Package: ~/nvim-config
+  Target: ~/.config
+  Installed: 2025-11-12 14:30:15
+  Symlinks: 5
+```
+
+**Verbose mode** checks each symlink and reports issues:
+
+```bash
+$ haunt list --verbose dotfiles
+dotfiles
+  Package: ~/dotfiles
+  Target: ~/
+  Installed: 2025-11-12 13:45:23
+  Symlinks:
+    Correct
+      ~/.bashrc -> ~/dotfiles/.bashrc
+    Inconsistent with Registry
+      ~/.vimrc -> ~/dotfiles/.vimrc (link missing)
+      ~/.zshrc -> /other/file (expected ~/dotfiles/.zshrc)
+      ~/.profile -> ~/dotfiles/.profile (source file missing)
+
+  To fix inconsistent symlinks:
+    haunt install ~/dotfiles ~/
+```
+
+Inconsistent symlink types:
+- `(link missing)`: symlink doesn't exist at expected location
+- `(expected ...)`: symlink points to wrong target
+- `(source file missing)`: symlink exists but source file is gone
+
 ## Conflict handling
 
 By default haunt aborts on any conflict:

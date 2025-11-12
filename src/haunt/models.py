@@ -59,6 +59,40 @@ class Symlink:
         actual_target = self.link_path.readlink()
         return self.points_to(actual_target)
 
+    def is_missing(self) -> bool:
+        """Check if the symlink doesn't exist at link_path.
+
+        Returns:
+            True if link_path doesn't exist at all
+        """
+        return not self.link_path.exists(follow_symlinks=False)
+
+    def is_modified(self) -> bool:
+        """Check if symlink exists but points to wrong target.
+
+        Returns:
+            True if link_path exists but doesn't point to source_path
+        """
+        return self.link_path.exists(follow_symlinks=False) and not self.exists()
+
+    def source_exists(self) -> bool:
+        """Check if the source file exists.
+
+        Returns:
+            True if source_path exists
+        """
+        return self.source_path.exists()
+
+    def get_actual_target(self) -> Path | None:
+        """Get the actual target the symlink points to.
+
+        Returns:
+            The path the symlink points to, or None if link_path is not a symlink
+        """
+        if not self.link_path.is_symlink():
+            return None
+        return self.link_path.readlink()
+
 
 @dataclass
 class PackageEntry:

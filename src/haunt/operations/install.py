@@ -1,6 +1,5 @@
 """High-level operations for install and uninstall."""
 
-from datetime import UTC
 from datetime import datetime
 from pathlib import Path
 
@@ -151,7 +150,7 @@ def apply_install(
         package_dir=plan.package_dir,
         target_dir=plan.target_dir,
         symlinks=all_symlinks,
-        installed_at=datetime.now(UTC).isoformat(),
+        installed_at=datetime.now().astimezone().isoformat(),
     )
 
     registry.packages[plan.package_name] = entry
