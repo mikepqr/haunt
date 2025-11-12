@@ -192,6 +192,17 @@ haunt uninstall dotfiles
 haunt install ~/dotfiles
 ```
 
+## Git Integration
+
+If your package is in a git repository, `haunt` automatically uses `git ls-files` to discover files. This means:
+
+- ✅ `.gitignore` rules are respected automatically
+- ✅ `.git` directory and `.gitmodules` are excluded
+- ✅ Only tracked files are symlinked
+- ✅ Files in submodules are discovered
+
+For non-git packages (or if git is not available), `haunt` falls back to discovering all files in the directory tree.
+
 ## The Registry
 
 `haunt` maintains state about the links it manages independently of the package directory. This means:
