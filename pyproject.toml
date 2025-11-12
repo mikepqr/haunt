@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.scripts]
-haunt = "haunt.cli:main"
+haunt = "haunt._cli.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mikepqr/haunt"
@@ -52,7 +52,10 @@ line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP"]
+select = ["E", "F", "I", "B", "C4", "UP", "TID"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 
 [tool.ruff.lint.isort]
 force-single-line = true

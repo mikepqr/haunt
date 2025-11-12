@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from haunt._registry import REGISTRY_VERSION
+from haunt._registry import Registry
 from haunt.exceptions import RegistryValidationError
 from haunt.exceptions import RegistryVersionError
 from haunt.models import PackageEntry
 from haunt.models import Symlink
-from haunt.registry import REGISTRY_VERSION
-from haunt.registry import Registry
 
 
 class TestDefaultPath:
@@ -22,9 +22,9 @@ class TestDefaultPath:
         mock_user_state_path = MagicMock(return_value=tmp_path / "haunt_state")
 
         # Mock platformdirs.user_state_path
-        import haunt.registry
+        import haunt._registry
 
-        monkeypatch.setattr(haunt.registry, "user_state_path", mock_user_state_path)
+        monkeypatch.setattr(haunt._registry, "user_state_path", mock_user_state_path)
 
         result = Registry.default_path()
 
@@ -74,12 +74,12 @@ def nvim_entry():
 
 
 class TestLoadRegistry:
-    """Tests for Registry.load()."""
+    """Tests for Registry() constructor."""
 
     def test_load_nonexistent_file_creates_empty_registry(self, tmp_path):
         """Test loading when file doesn't exist returns empty registry."""
         registry_file = tmp_path / "registry.json"
-        registry = Registry.load(registry_file)
+        registry = Registry(path=registry_file)
 
         assert isinstance(registry, Registry)
         assert len(registry.packages) == 0
@@ -90,7 +90,7 @@ class TestLoadRegistry:
         registry_file = tmp_path / "registry.json"
         registry_file.write_text(json.dumps({"version": 1, "packages": {}}))
 
-        registry = Registry.load(registry_file)
+        registry = Registry(path=registry_file)
 
         assert len(registry.packages) == 0
         assert registry.version == 1
@@ -104,7 +104,7 @@ class TestLoadRegistry:
         }
         registry_file.write_text(json.dumps(data))
 
-        registry = Registry.load(registry_file)
+        registry = Registry(path=registry_file)
         assert len(registry.packages) == 1
         assert registry.version == 1
 
@@ -127,7 +127,7 @@ class TestLoadRegistry:
         }
         registry_file.write_text(json.dumps(data))
 
-        registry = Registry.load(registry_file)
+        registry = Registry(path=registry_file)
 
         assert len(registry.packages) == 2
         assert registry.version == 1
@@ -140,7 +140,7 @@ class TestLoadRegistry:
         registry_file.write_text("{ invalid json }")
 
         with pytest.raises(RegistryValidationError):
-            Registry.load(registry_file)
+            Registry(path=registry_file)
 
     def test_load_missing_packages_key_raises_error(self, tmp_path):
         """Test loading JSON without 'packages' key raises error."""
@@ -148,7 +148,7 @@ class TestLoadRegistry:
         registry_file.write_text(json.dumps({"version": 1, "wrong_key": {}}))
 
         with pytest.raises(RegistryValidationError):
-            Registry.load(registry_file)
+            Registry(path=registry_file)
 
     def test_load_missing_version_raises_error(self, tmp_path):
         """Test loading registry without version field raises error."""
@@ -156,7 +156,7 @@ class TestLoadRegistry:
         registry_file.write_text(json.dumps({"packages": {}}))
 
         with pytest.raises(RegistryValidationError, match="missing 'version'"):
-            Registry.load(registry_file)
+            Registry(path=registry_file)
 
     def test_load_future_version_raises_error(self, tmp_path):
         """Test loading registry with future version raises error."""
@@ -164,19 +164,19 @@ class TestLoadRegistry:
         registry_file.write_text(json.dumps({"version": 999, "packages": {}}))
 
         with pytest.raises(RegistryVersionError, match="version 999"):
-            Registry.load(registry_file)
+            Registry(path=registry_file)
 
     def test_load_with_none_uses_default_path(self, tmp_path, monkeypatch):
-        """Test that load(path=None) uses default_path()."""
+        """Test that Registry() with no path uses default_path()."""
         # Monkeypatch default_path to return a specific path
         test_registry = tmp_path / "test_registry.json"
-        monkeypatch.setattr(Registry, "default_path", lambda: test_registry)
+        monkeypatch.setattr(Registry, "default_path", lambda cls: test_registry)
 
         # Create a registry file at the default path
         test_registry.write_text(json.dumps({"version": 1, "packages": {}}))
 
-        # Load with path=None should load from default_path
-        registry = Registry.load(path=None)
+        # Registry() with no path should load from default_path
+        registry = Registry()
 
         # Verify it loaded successfully (proving it read from the right path)
         assert registry.version == 1
@@ -198,7 +198,7 @@ class TestLoadRegistry:
         registry_file.write_text(json.dumps(data))
 
         with pytest.raises(RegistryValidationError, match="Missing required field"):
-            Registry.load(registry_file)
+            Registry(path=registry_file)
 
 
 class TestSaveRegistry:
@@ -207,9 +207,9 @@ class TestSaveRegistry:
     def test_save_empty_registry(self, tmp_path):
         """Test saving an empty registry."""
         registry_file = tmp_path / "registry.json"
-        registry = Registry()
+        registry = Registry(path=registry_file)
 
-        registry.save(registry_file)
+        registry.save()
 
         assert registry_file.exists()
         data = json.loads(registry_file.read_text())
@@ -218,10 +218,10 @@ class TestSaveRegistry:
     def test_save_registry_with_packages(self, tmp_path, dotfiles_entry):
         """Test saving registry with packages."""
         registry_file = tmp_path / "registry.json"
-        registry = Registry()
+        registry = Registry(path=registry_file)
         registry.packages["dotfiles"] = dotfiles_entry
 
-        registry.save(registry_file)
+        registry.save()
 
         data = json.loads(registry_file.read_text())
         assert data["version"] == 1
@@ -232,40 +232,21 @@ class TestSaveRegistry:
     def test_save_creates_parent_directories(self, tmp_path):
         """Test that save creates parent directories if needed."""
         registry_file = tmp_path / "nested" / "dir" / "registry.json"
-        registry = Registry()
+        registry = Registry(path=registry_file)
 
-        registry.save(registry_file)
+        registry.save()
 
         assert registry_file.exists()
         assert registry_file.parent.exists()
 
-    def test_save_overwrites_existing_file(self, tmp_path, dotfiles_entry, nvim_entry):
-        """Test that save overwrites existing registry file."""
-        registry_file = tmp_path / "registry.json"
-
-        # Save initial registry
-        registry1 = Registry()
-        registry1.packages["dotfiles"] = dotfiles_entry
-        registry1.save(registry_file)
-
-        # Save new registry
-        registry2 = Registry()
-        registry2.packages["nvim"] = nvim_entry
-        registry2.save(registry_file)
-
-        # Verify only new content exists
-        data = json.loads(registry_file.read_text())
-        assert "nvim" in data["packages"]
-        assert "dotfiles" not in data["packages"]
-
     def test_save_roundtrip(self, tmp_path, dotfiles_entry):
         """Test that save/load roundtrip preserves data."""
         registry_file = tmp_path / "registry.json"
-        original = Registry()
+        original = Registry(path=registry_file)
         original.packages["dotfiles"] = dotfiles_entry
 
-        original.save(registry_file)
-        loaded = Registry.load(registry_file)
+        original.save()
+        loaded = Registry(path=registry_file)
 
         assert len(loaded.packages) == len(original.packages)
         assert "dotfiles" in loaded.packages
@@ -279,17 +260,15 @@ class TestSaveRegistry:
             "/home/user/dotfiles/.bashrc"
         )
 
-    def test_save_with_none_uses_default_path(self, tmp_path, monkeypatch):
-        """Test that save(path=None) uses default_path()."""
-        # Monkeypatch default_path to return a specific path
+    def test_save_uses_constructor_path(self, tmp_path):
+        """Test that save() uses path from constructor."""
         test_registry = tmp_path / "test_registry.json"
-        monkeypatch.setattr(Registry, "default_path", lambda cls: test_registry)
 
-        # Save with path=None should write to default_path
-        registry = Registry()
-        registry.save(path=None)
+        # Create registry with specific path
+        registry = Registry(path=test_registry)
+        registry.save()
 
-        # Verify the file was created at the default path
+        # Verify the file was created at the specified path
         assert test_registry.exists()
         data = json.loads(test_registry.read_text())
         assert data == {"version": 1, "packages": {}}

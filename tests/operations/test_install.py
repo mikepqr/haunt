@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from haunt._registry import Registry
 from haunt.exceptions import ConflictError
 from haunt.exceptions import PackageAlreadyInstalledError
 from haunt.models import ConflictMode
@@ -14,16 +15,15 @@ from haunt.models import DirectoryConflict
 from haunt.models import FileConflict
 from haunt.models import InstallPlan
 from haunt.models import Symlink
-from haunt.operations import compute_install_plan
-from haunt.operations import execute_install_plan
-from haunt.registry import Registry
+from haunt.operations import apply_install
+from haunt.operations import plan_install
 
 
-class TestComputeInstallPlan:
-    """Tests for compute_install_plan()."""
+class TestPlanInstall:
+    """Tests for plan_install()."""
 
-    def test_calls_normalize_package_dir(self, tmp_path):
-        """Test that compute_install_plan calls normalize_package_dir."""
+    def test_calls_normalize_package_dir(self, tmp_path, monkeypatch):
+        """Test that plan_install calls normalize_package_dir."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         (package_dir / "file.txt").write_text("content")
@@ -33,11 +33,11 @@ class TestComputeInstallPlan:
         with patch(
             "haunt.operations.install.normalize_package_dir", return_value=package_dir
         ) as mock_normalize:
-            compute_install_plan(package_dir, target_dir)
+            plan_install(package_dir, target_dir)
             mock_normalize.assert_called_once()
 
-    def test_calls_normalize_target_dir(self, tmp_path):
-        """Test that compute_install_plan calls normalize_target_dir."""
+    def test_calls_normalize_target_dir(self, tmp_path, monkeypatch):
+        """Test that plan_install calls normalize_target_dir."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         (package_dir / "file.txt").write_text("content")
@@ -47,10 +47,10 @@ class TestComputeInstallPlan:
         with patch(
             "haunt.operations.install.normalize_target_dir", return_value=target_dir
         ) as mock_normalize:
-            compute_install_plan(package_dir, target_dir)
+            plan_install(package_dir, target_dir)
             mock_normalize.assert_called_once()
 
-    def test_simple_install_with_no_conflicts(self, tmp_path):
+    def test_simple_install_with_no_conflicts(self, tmp_path, monkeypatch):
         """Test planning install with no existing files."""
         # Create package with some files
         package_dir = tmp_path / "package"
@@ -61,7 +61,7 @@ class TestComputeInstallPlan:
         target_dir = tmp_path / "target"
         target_dir.mkdir()
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         assert plan.package_name == package_dir.name
         assert plan.package_dir == package_dir
@@ -74,7 +74,7 @@ class TestComputeInstallPlan:
         assert target_dir / "file1.txt" in link_paths
         assert target_dir / "file2.txt" in link_paths
 
-    def test_install_with_nested_files(self, tmp_path):
+    def test_install_with_nested_files(self, tmp_path, monkeypatch):
         """Test planning install with nested directory structure."""
         package_dir = tmp_path / "package"
         (package_dir / "config" / "nvim").mkdir(parents=True)
@@ -84,7 +84,7 @@ class TestComputeInstallPlan:
         target_dir = tmp_path / "target"
         target_dir.mkdir()
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         assert len(plan.symlinks_to_create) == 2
         link_paths = {s.link_path for s in plan.symlinks_to_create}
@@ -92,7 +92,7 @@ class TestComputeInstallPlan:
         assert target_dir / "bashrc" in link_paths
         assert len(plan.conflicts) == 0
 
-    def test_detects_file_conflict(self, tmp_path):
+    def test_detects_file_conflict(self, tmp_path, monkeypatch):
         """Test that existing regular files are detected as conflicts."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -102,7 +102,7 @@ class TestComputeInstallPlan:
         target_dir.mkdir()
         (target_dir / "bashrc").write_text("old content")
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         assert len(plan.symlinks_to_create) == 0
         assert len(plan.conflicts) == 1
@@ -110,7 +110,7 @@ class TestComputeInstallPlan:
         assert conflict.path == target_dir / "bashrc"
         assert isinstance(conflict, FileConflict)
 
-    def test_detects_wrong_symlink_conflict(self, tmp_path):
+    def test_detects_wrong_symlink_conflict(self, tmp_path, monkeypatch):
         """Test that symlinks pointing to wrong location are conflicts."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -123,7 +123,7 @@ class TestComputeInstallPlan:
         wrong_source.write_text("wrong")
         (target_dir / "bashrc").symlink_to(wrong_source)
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         assert len(plan.symlinks_to_create) == 0
         assert len(plan.conflicts) == 1
@@ -132,7 +132,7 @@ class TestComputeInstallPlan:
         assert isinstance(conflict, DifferentSymlinkConflict)
         assert conflict.points_to == wrong_source
 
-    def test_no_conflict_when_symlink_already_correct(self, tmp_path):
+    def test_no_conflict_when_symlink_already_correct(self, tmp_path, monkeypatch):
         """Test that correctly pointing symlinks are reported as CORRECT_SYMLINK."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -146,14 +146,14 @@ class TestComputeInstallPlan:
         target_link = target_dir / "bashrc"
         target_link.symlink_to(Path("../package/bashrc"))
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         # Should have one CORRECT_SYMLINK conflict (for reporting) and no files to link
         assert len(plan.conflicts) == 1
         assert isinstance(plan.conflicts[0], CorrectSymlinkConflict)
         assert len(plan.symlinks_to_create) == 0
 
-    def test_symlinks_use_absolute_paths(self, tmp_path):
+    def test_symlinks_use_absolute_paths(self, tmp_path, monkeypatch):
         """Test that symlinks in plan use absolute paths."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -162,7 +162,7 @@ class TestComputeInstallPlan:
         target_dir = tmp_path / "target"
         target_dir.mkdir()
 
-        plan = compute_install_plan(package_dir, target_dir)
+        plan = plan_install(package_dir, target_dir)
 
         assert len(plan.symlinks_to_create) == 1
         symlink = plan.symlinks_to_create[0]
@@ -172,7 +172,7 @@ class TestComputeInstallPlan:
         # But relative_source_path should give relative version
         assert symlink.relative_source_path == Path("../package/bashrc")
 
-    def test_abort_mode_keeps_conflicts_in_conflict_list(self, tmp_path):
+    def test_abort_mode_keeps_conflicts_in_conflict_list(self, tmp_path, monkeypatch):
         """Test that ABORT mode keeps conflicts in conflicts list only."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -182,16 +182,16 @@ class TestComputeInstallPlan:
         target_dir.mkdir()
         (target_dir / "file1.txt").write_text("existing")
 
-        plan = compute_install_plan(
-            package_dir, target_dir, on_conflict=ConflictMode.ABORT
-        )
+        plan = plan_install(package_dir, target_dir, on_conflict=ConflictMode.ABORT)
 
         # File conflict should be in conflicts, not symlinks_to_create
         assert len(plan.conflicts) == 1
         assert isinstance(plan.conflicts[0], FileConflict)
         assert len(plan.symlinks_to_create) == 0
 
-    def test_force_mode_moves_file_conflicts_to_create_list(self, tmp_path):
+    def test_force_mode_moves_file_conflicts_to_create_list(
+        self, tmp_path, monkeypatch
+    ):
         """Test that FORCE mode includes file conflicts in symlinks_to_create."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -201,9 +201,7 @@ class TestComputeInstallPlan:
         target_dir.mkdir()
         (target_dir / "file1.txt").write_text("existing")
 
-        plan = compute_install_plan(
-            package_dir, target_dir, on_conflict=ConflictMode.FORCE
-        )
+        plan = plan_install(package_dir, target_dir, on_conflict=ConflictMode.FORCE)
 
         # Conflict should be in both lists for tracking
         assert len(plan.conflicts) == 1
@@ -212,7 +210,9 @@ class TestComputeInstallPlan:
         assert len(plan.symlinks_to_create) == 1
         assert plan.symlinks_to_create[0].link_path == target_dir / "file1.txt"
 
-    def test_force_mode_does_not_include_directory_conflicts(self, tmp_path):
+    def test_force_mode_does_not_include_directory_conflicts(
+        self, tmp_path, monkeypatch
+    ):
         """Test FORCE mode excludes directory conflicts from symlinks."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -222,9 +222,7 @@ class TestComputeInstallPlan:
         target_dir.mkdir()
         (target_dir / "file1.txt").mkdir()
 
-        plan = compute_install_plan(
-            package_dir, target_dir, on_conflict=ConflictMode.FORCE
-        )
+        plan = plan_install(package_dir, target_dir, on_conflict=ConflictMode.FORCE)
 
         # Directory conflict should be in conflicts
         assert len(plan.conflicts) == 1
@@ -232,7 +230,7 @@ class TestComputeInstallPlan:
         # But NOT in symlinks_to_create
         assert len(plan.symlinks_to_create) == 0
 
-    def test_skip_mode_keeps_conflicts_in_conflict_list(self, tmp_path):
+    def test_skip_mode_keeps_conflicts_in_conflict_list(self, tmp_path, monkeypatch):
         """Test that SKIP mode keeps conflicts in conflicts list only."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -243,9 +241,7 @@ class TestComputeInstallPlan:
         target_dir.mkdir()
         (target_dir / "file1.txt").write_text("existing")
 
-        plan = compute_install_plan(
-            package_dir, target_dir, on_conflict=ConflictMode.SKIP
-        )
+        plan = plan_install(package_dir, target_dir, on_conflict=ConflictMode.SKIP)
 
         # Conflict should be in conflicts, not symlinks_to_create
         assert len(plan.conflicts) == 1
@@ -255,15 +251,18 @@ class TestComputeInstallPlan:
         assert plan.symlinks_to_create[0].link_path == target_dir / "file2.txt"
 
 
-class TestExecuteInstallPlan:
-    """Tests for execute_install_plan()."""
+class TestApplyInstall:
+    """Tests for apply_install()."""
 
-    def test_creates_symlinks_from_plan(self, tmp_path):
+    def test_creates_symlinks_from_plan(self, tmp_path, monkeypatch):
         """Test that symlinks in plan are created."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         # Create a plan with symlinks to create
         plan = InstallPlan(
@@ -283,7 +282,7 @@ class TestExecuteInstallPlan:
             conflicts=[],
         )
 
-        execute_install_plan(plan, registry_path)
+        apply_install(plan)
 
         # Check symlinks were created
         assert (target_dir / "file1.txt").is_symlink()
@@ -291,12 +290,15 @@ class TestExecuteInstallPlan:
         assert (target_dir / "file1.txt").readlink() == Path("../package/file1.txt")
         assert (target_dir / "file2.txt").readlink() == Path("../package/file2.txt")
 
-    def test_updates_registry(self, tmp_path):
+    def test_updates_registry(self, tmp_path, monkeypatch):
         """Test that registry is updated with package info."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -311,10 +313,10 @@ class TestExecuteInstallPlan:
             conflicts=[],
         )
 
-        execute_install_plan(plan, registry_path)
+        apply_install(plan)
 
         # Check registry was updated
-        registry = Registry.load(registry_path)
+        registry = Registry(path=registry_path)
         assert "test-package" in registry.packages
         entry = registry.packages["test-package"]
         assert entry.name == "test-package"
@@ -323,12 +325,15 @@ class TestExecuteInstallPlan:
         assert entry.symlinks[0].link_path == target_dir / "bashrc"
         assert entry.symlinks[0].source_path == package_dir / "bashrc"
 
-    def test_creates_parent_directories(self, tmp_path):
+    def test_creates_parent_directories(self, tmp_path, monkeypatch):
         """Test that parent directories are created for nested symlinks."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -343,19 +348,22 @@ class TestExecuteInstallPlan:
             conflicts=[],
         )
 
-        execute_install_plan(plan, registry_path)
+        apply_install(plan)
 
         # Check parent directories were created
         link = target_dir / "config" / "nvim" / "init.vim"
         assert link.parent.exists()
         assert link.is_symlink()
 
-    def test_handles_empty_plan(self, tmp_path):
+    def test_handles_empty_plan(self, tmp_path, monkeypatch):
         """Test that empty plan doesn't create anything."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -365,19 +373,22 @@ class TestExecuteInstallPlan:
             conflicts=[],
         )
 
-        execute_install_plan(plan, registry_path)
+        apply_install(plan)
 
         # Registry should still be updated
-        registry = Registry.load(registry_path)
+        registry = Registry(path=registry_path)
         assert "test-package" in registry.packages
         assert registry.packages["test-package"].symlinks == []
 
-    def test_includes_already_correct_symlinks_in_registry(self, tmp_path):
+    def test_includes_already_correct_symlinks_in_registry(self, tmp_path, monkeypatch):
         """Test that already-correct symlinks are added to registry for uninstall."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         # Create plan with one new symlink and one already-correct
         new_symlink = Symlink(
@@ -400,10 +411,10 @@ class TestExecuteInstallPlan:
             ],
         )
 
-        execute_install_plan(plan, registry_path)
+        apply_install(plan)
 
         # Check registry includes both symlinks
-        registry = Registry.load(registry_path)
+        registry = Registry(path=registry_path)
         entry = registry.packages["test-package"]
         assert len(entry.symlinks) == 2
 
@@ -416,12 +427,15 @@ class TestExecuteInstallPlan:
         assert package_dir / "file1.txt" in source_paths
         assert package_dir / "file2.txt" in source_paths
 
-    def test_raises_for_directory_conflicts_in_abort_mode(self, tmp_path):
+    def test_raises_for_directory_conflicts_in_abort_mode(self, tmp_path, monkeypatch):
         """Test that directory conflicts raise ConflictError in ABORT mode."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -436,17 +450,22 @@ class TestExecuteInstallPlan:
         )
 
         with pytest.raises(ConflictError) as exc_info:
-            execute_install_plan(plan, registry_path, on_conflict=ConflictMode.ABORT)
+            apply_install(plan, on_conflict=ConflictMode.ABORT)
 
         assert len(exc_info.value.conflicts) == 1
         assert isinstance(exc_info.value.conflicts[0], DirectoryConflict)
 
-    def test_raises_for_directory_conflicts_even_in_force_mode(self, tmp_path):
+    def test_raises_for_directory_conflicts_even_in_force_mode(
+        self, tmp_path, monkeypatch
+    ):
         """Test that directory conflicts raise ConflictError even in FORCE mode."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -461,17 +480,20 @@ class TestExecuteInstallPlan:
         )
 
         with pytest.raises(ConflictError) as exc_info:
-            execute_install_plan(plan, registry_path, on_conflict=ConflictMode.FORCE)
+            apply_install(plan, on_conflict=ConflictMode.FORCE)
 
         assert len(exc_info.value.conflicts) == 1
         assert isinstance(exc_info.value.conflicts[0], DirectoryConflict)
 
-    def test_raises_for_file_conflicts_in_abort_mode(self, tmp_path):
+    def test_raises_for_file_conflicts_in_abort_mode(self, tmp_path, monkeypatch):
         """Test that file conflicts raise ConflictError in ABORT mode."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -486,17 +508,20 @@ class TestExecuteInstallPlan:
         )
 
         with pytest.raises(ConflictError) as exc_info:
-            execute_install_plan(plan, registry_path, on_conflict=ConflictMode.ABORT)
+            apply_install(plan, on_conflict=ConflictMode.ABORT)
 
         assert len(exc_info.value.conflicts) == 1
         assert isinstance(exc_info.value.conflicts[0], FileConflict)
 
-    def test_succeeds_with_file_conflicts_in_skip_mode(self, tmp_path):
+    def test_succeeds_with_file_conflicts_in_skip_mode(self, tmp_path, monkeypatch):
         """Test that file conflicts don't raise in SKIP mode."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         plan = InstallPlan(
             package_name="test-package",
@@ -511,19 +536,22 @@ class TestExecuteInstallPlan:
         )
 
         # Should not raise
-        execute_install_plan(plan, registry_path, on_conflict=ConflictMode.SKIP)
+        apply_install(plan, on_conflict=ConflictMode.SKIP)
 
         # Registry should still be updated
-        registry = Registry.load(registry_path)
+        registry = Registry(path=registry_path)
         assert "test-package" in registry.packages
 
-    def test_raises_for_package_name_collision(self, tmp_path):
+    def test_raises_for_package_name_collision(self, tmp_path, monkeypatch):
         """Test installing package with same name from different path raises."""
         # Two different package directories with the same basename
         package_dir1 = tmp_path / "dotfiles1" / "shell"
         package_dir2 = tmp_path / "dotfiles2" / "shell"
         target_dir = tmp_path / "target"
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         # Install first package
         plan1 = InstallPlan(
@@ -533,7 +561,7 @@ class TestExecuteInstallPlan:
             symlinks_to_create=[],
             conflicts=[],
         )
-        execute_install_plan(plan1, registry_path)
+        apply_install(plan1)
 
         # Try to install second package with same name but different path
         plan2 = InstallPlan(
@@ -545,7 +573,7 @@ class TestExecuteInstallPlan:
         )
 
         with pytest.raises(PackageAlreadyInstalledError) as exc_info:
-            execute_install_plan(plan2, registry_path)
+            apply_install(plan2)
 
         # Check error details
         error = exc_info.value
@@ -553,11 +581,14 @@ class TestExecuteInstallPlan:
         assert error.existing_path == str(package_dir1)
         assert error.new_path == str(package_dir2)
 
-    def test_allows_reinstall_from_same_path(self, tmp_path):
+    def test_allows_reinstall_from_same_path(self, tmp_path, monkeypatch):
         """Test reinstalling package from same path is allowed (idempotent)."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
 
         # Install package
         plan1 = InstallPlan(
@@ -567,7 +598,7 @@ class TestExecuteInstallPlan:
             symlinks_to_create=[],
             conflicts=[],
         )
-        execute_install_plan(plan1, registry_path)
+        apply_install(plan1)
 
         # Reinstall from same path - should not raise
         plan2 = InstallPlan(
@@ -577,9 +608,9 @@ class TestExecuteInstallPlan:
             symlinks_to_create=[],
             conflicts=[],
         )
-        execute_install_plan(plan2, registry_path)  # Should not raise
+        apply_install(plan2)  # Should not raise
 
         # Registry should still have the package
-        registry = Registry.load(registry_path)
+        registry = Registry(path=registry_path)
         assert "package" in registry.packages
         assert registry.packages["package"].package_dir == package_dir

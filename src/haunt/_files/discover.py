@@ -68,7 +68,7 @@ def discover_files_git(package_dir: Path) -> list[Path]:
         if not file_str:  # Skip empty strings from trailing null
             continue
         file_path = Path(file_str)
-        if file_path.name == ".gitmodules":  # Filter out .gitmodules
+        if file_path.name == ".gitmodules":
             continue
         files.append(file_path)
 

@@ -171,14 +171,7 @@ def print_conflict_error(error: ConflictError, on_conflict: ConflictMode) -> Non
 
 
 def _display_path(path: Path) -> str:
-    """Format path for display, using ~ for home directory.
-
-    Args:
-        path: Path to format
-
-    Returns:
-        String representation with ~ substitution if applicable
-    """
+    """Format path with ~ for home directory."""
     try:
         # Try to make it relative to home
         home = Path.home()

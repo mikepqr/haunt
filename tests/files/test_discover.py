@@ -4,10 +4,10 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-from haunt.files.discover import _should_use_git
-from haunt.files.discover import discover_files
-from haunt.files.discover import discover_files_git
-from haunt.files.discover import discover_files_walk
+from haunt._files.discover import _should_use_git
+from haunt._files.discover import discover_files
+from haunt._files.discover import discover_files_git
+from haunt._files.discover import discover_files_walk
 
 
 class TestDiscoverFilesWalk:
@@ -393,7 +393,7 @@ class TestDiscoverFiles:
         package_dir.mkdir()
         (package_dir / "file.txt").touch()
 
-        with patch("haunt.files.discover._should_use_git", return_value=False):
+        with patch("haunt._files.discover._should_use_git", return_value=False):
             files = discover_files(package_dir)
 
         assert Path("file.txt") in files

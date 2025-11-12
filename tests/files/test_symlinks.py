@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from haunt.files import check_conflict
-from haunt.files import create_symlink
-from haunt.files import remove_symlink
+from haunt._files.symlinks import check_conflict
+from haunt._files.symlinks import create_symlink
+from haunt._files.symlinks import remove_symlink
 from haunt.models import BrokenSymlinkConflict
 from haunt.models import CorrectSymlinkConflict
 from haunt.models import DifferentSymlinkConflict

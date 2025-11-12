@@ -2,7 +2,7 @@
 
 import pytest
 
-from haunt.files import remove_empty_directories
+from haunt._files.cleanup import remove_empty_directories
 
 
 class TestRemoveEmptyDirectories:
