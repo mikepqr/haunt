@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import haunt._registry
 from haunt._registry import REGISTRY_VERSION
 from haunt._registry import Registry
 from haunt.exceptions import RegistryValidationError
@@ -19,11 +20,10 @@ class TestDefaultPath:
 
     def test_default_path_calls_user_state_path(self, monkeypatch, tmp_path):
         """Test that default_path calls user_state_path('haunt')."""
+        # Undo the autouse fixture monkeypatch to test the real implementation
+        monkeypatch.undo()
+
         mock_user_state_path = MagicMock(return_value=tmp_path / "haunt_state")
-
-        # Mock platformdirs.user_state_path
-        import haunt._registry
-
         monkeypatch.setattr(haunt._registry, "user_state_path", mock_user_state_path)
 
         result = Registry.default_path()
