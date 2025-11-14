@@ -61,7 +61,7 @@ The files in the package are symlinked from your home folder, and existing files
             └── init.lua
 ```
 
-Uninstall the package:
+Uninstall the package (using the package name, which is the directory basename):
 ```bash
 $ haunt uninstall dotfiles
 Removing symlinks:
@@ -70,6 +70,8 @@ Removing symlinks:
 
 2 symlinks removed
 ```
+
+To see all installed packages, use `haunt list`.
 
 ## Commands
 
@@ -95,6 +97,8 @@ haunt uninstall [OPTIONS] PACKAGE
 
 - `PACKAGE` - package name to uninstall (required)
 - `--dry-run, -n` - show what would happen without doing it
+
+**Package names** are derived from the directory basename. For example, `haunt install ~/dotfiles` creates a package named `dotfiles`. To see all installed packages, use `haunt list`.
 
 ### `haunt list`
 
