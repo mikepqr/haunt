@@ -24,7 +24,7 @@ class PackageEntryDict(TypedDict):
     installed_at: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Symlink:
     """A symlink to create or manage."""
 
@@ -50,6 +50,8 @@ class Symlink:
 
     def exists(self) -> bool:
         """Check if link_path exists as a symlink pointing to source_path.
+
+        Note: this does not verify that source_path exists!
 
         Returns:
             True if link_path is a symlink that points to source_path
@@ -201,8 +203,10 @@ class InstallPlan:
     package_name: str
     package_dir: Path
     target_dir: Path
+    wanted_symlinks: list[Symlink]  # All symlinks that should exist after install
     symlinks_to_create: list[Symlink]
     conflicts: list[Conflict]
+    symlinks_to_remove: list[Symlink]  # Orphaned symlinks from previous install
 
 
 @dataclass

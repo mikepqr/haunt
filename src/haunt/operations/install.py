@@ -21,8 +21,55 @@ from haunt.models import PackageEntry
 from haunt.models import Symlink
 
 
+def check_package_name_collision(package_name: str, package_dir: Path) -> None:
+    """Raise if registry contains package_name installed from a different directory."""
+    registry = Registry()
+    if (
+        package_name in registry.packages
+        and registry.packages[package_name].package_dir != package_dir
+    ):
+        existing_entry = registry.packages[package_name]
+        raise PackageAlreadyInstalledError(
+            package_name=package_name,
+            existing_path=str(existing_entry.package_dir),
+            new_path=str(package_dir),
+        )
+
+
+def build_wanted_symlinks(package_dir: Path, target_dir: Path) -> list[Symlink]:
+    """Build list of all symlinks that should exist after install."""
+    files = discover_files(package_dir)
+    return [
+        Symlink(
+            link_path=target_dir / rel_file_path,
+            source_path=package_dir / rel_file_path,
+        )
+        for rel_file_path in files
+    ]
+
+
+def find_unwanted_symlinks(
+    package_name: str,
+    wanted_symlinks: list[Symlink],
+) -> list[Symlink]:
+    """Find symlinks from a previous install that should be removed."""
+    registry = Registry()
+    existing_entry = registry.packages.get(package_name)
+    if existing_entry is None:
+        return []
+    else:
+        # The set of symlinks haunt installed, and that have not been altered
+        # since the installation.
+        managed_symlinks = {r for r in existing_entry.symlinks if r.exists()}
+
+        # Symlinks we manage, that are not wanted, should be removed.
+        return list(managed_symlinks - set(wanted_symlinks))
+
+
 def plan_install(
-    package_dir: Path, target_dir: Path, on_conflict: ConflictMode = ConflictMode.ABORT
+    package_dir: Path,
+    target_dir: Path,
+    on_conflict: ConflictMode = ConflictMode.ABORT,
 ) -> InstallPlan:
     """Plan an install operation.
 
@@ -43,48 +90,44 @@ def plan_install(
         NotADirectoryError: If package_dir is not a directory
         ValueError: If package_dir is /, or if target_dir equals or is inside
             package_dir
+        PackageAlreadyInstalledError: If package name exists from different directory
     """
     package_dir = normalize_package_dir(package_dir)
     target_dir = normalize_target_dir(target_dir)
     validate_install_directories(package_dir, target_dir)
 
     package_name = package_dir.name
+    check_package_name_collision(package_name, package_dir)
+
+    wanted_symlinks = build_wanted_symlinks(package_dir, target_dir)
+
     symlinks_to_create: list[Symlink] = []
     conflicts: list[Conflict] = []
 
-    files = discover_files(package_dir)
-
-    for rel_file_path in files:
-        source_path = package_dir / rel_file_path
-        link_path = target_dir / rel_file_path
-
-        symlink = Symlink(
-            link_path=link_path,
-            source_path=source_path,
-        )
-
+    # Find conflicts and symlinks to create
+    for symlink in wanted_symlinks:
         conflict = check_conflict(symlink)
         if conflict is None:
-            # Nothing exists, always create symlink
             symlinks_to_create.append(symlink)
-        elif isinstance(conflict, CorrectSymlinkConflict):
-            # Symlink already correct, never recreate
-            conflicts.append(conflict)
         else:
-            # Real conflict - record it for reporting
             conflicts.append(conflict)
-            # In FORCE mode, replace non-directory conflicts
-            if on_conflict == ConflictMode.FORCE and not isinstance(
-                conflict, DirectoryConflict
+            if (
+                not isinstance(conflict, DirectoryConflict)
+                and on_conflict == ConflictMode.FORCE
             ):
                 symlinks_to_create.append(symlink)
+
+    # Find managed symlinks that are no longer wanted
+    symlinks_to_remove = find_unwanted_symlinks(package_name, wanted_symlinks)
 
     return InstallPlan(
         package_name=package_name,
         package_dir=package_dir,
         target_dir=target_dir,
+        wanted_symlinks=wanted_symlinks,
         symlinks_to_create=symlinks_to_create,
         conflicts=conflicts,
+        symlinks_to_remove=symlinks_to_remove,
     )
 
 
@@ -103,16 +146,7 @@ def apply_install(
         ConflictError: If directory conflicts exist (never replaceable)
         ConflictError: If on_conflict=ABORT and blocking conflicts exist
     """
-    # Check for package name uniqueness
-    registry = Registry()
-    if plan.package_name in registry.packages:
-        existing_entry = registry.packages[plan.package_name]
-        if existing_entry.package_dir != plan.package_dir:
-            raise PackageAlreadyInstalledError(
-                package_name=plan.package_name,
-                existing_path=str(existing_entry.package_dir),
-                new_path=str(plan.package_dir),
-            )
+    check_package_name_collision(plan.package_name, plan.package_dir)
 
     # Check for directory conflicts - these always block regardless of mode
     directory_conflicts = [
@@ -129,29 +163,25 @@ def apply_install(
         if blocking_conflicts:
             raise ConflictError(blocking_conflicts)
 
+    # Remove orphaned symlinks from previous install
+    for symlink in plan.symlinks_to_remove:
+        if symlink.link_path.is_symlink():
+            symlink.link_path.unlink()
+
     # Create all symlinks (force=True in FORCE mode to replace existing files)
     force = on_conflict == ConflictMode.FORCE
     for symlink in plan.symlinks_to_create:
         create_symlink(symlink, force=force)
 
-    # Build list of all symlinks for registry (created + already correct)
-    all_symlinks = plan.symlinks_to_create.copy()
-    for conflict in plan.conflicts:
-        if isinstance(conflict, CorrectSymlinkConflict):
-            # Reconstruct symlink from conflict info
-            # We need to resolve points_to to get the absolute source path
-            absolute_source = (conflict.path.parent / conflict.points_to).resolve()
-            all_symlinks.append(
-                Symlink(link_path=conflict.path, source_path=absolute_source)
-            )
-
+    # Build registry entry with all wanted symlinks
     entry = PackageEntry(
         name=plan.package_name,
         package_dir=plan.package_dir,
         target_dir=plan.target_dir,
-        symlinks=all_symlinks,
+        symlinks=plan.wanted_symlinks,
         installed_at=datetime.now().astimezone().isoformat(),
     )
 
+    registry = Registry()
     registry.packages[plan.package_name] = entry
     registry.save()

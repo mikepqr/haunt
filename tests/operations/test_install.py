@@ -19,36 +19,43 @@ from haunt.operations import apply_install
 from haunt.operations import plan_install
 
 
+@pytest.fixture
+def mock_collision_check():
+    """Mock check_package_name_collision to do nothing."""
+    with patch("haunt.operations.install.check_package_name_collision"):
+        yield
+
+
+@pytest.fixture
+def mock_unwanted_symlinks():
+    """Mock find_unwanted_symlinks to return empty list."""
+    with patch("haunt.operations.install.find_unwanted_symlinks", return_value=[]):
+        yield
+
+
+@pytest.mark.usefixtures("mock_collision_check", "mock_unwanted_symlinks")
 class TestPlanInstall:
     """Tests for plan_install()."""
 
-    def test_calls_normalize_package_dir(self, tmp_path, monkeypatch):
-        """Test that plan_install calls normalize_package_dir."""
+    def test_normalizes_paths(self, tmp_path, monkeypatch):
+        """Test that plan_install normalizes package_dir and target_dir."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         (package_dir / "file.txt").write_text("content")
         target_dir = tmp_path / "target"
         target_dir.mkdir()
 
-        with patch(
-            "haunt.operations.install.normalize_package_dir", return_value=package_dir
-        ) as mock_normalize:
-            plan_install(package_dir, target_dir)
-            mock_normalize.assert_called_once()
+        # Change to tmp_path so relative paths resolve correctly
+        monkeypatch.chdir(tmp_path)
 
-    def test_calls_normalize_target_dir(self, tmp_path, monkeypatch):
-        """Test that plan_install calls normalize_target_dir."""
-        package_dir = tmp_path / "package"
-        package_dir.mkdir()
-        (package_dir / "file.txt").write_text("content")
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
+        # Pass relative paths
+        plan = plan_install(Path("package"), Path("target"))
 
-        with patch(
-            "haunt.operations.install.normalize_target_dir", return_value=target_dir
-        ) as mock_normalize:
-            plan_install(package_dir, target_dir)
-            mock_normalize.assert_called_once()
+        # Resulting plan should have absolute paths
+        assert plan.package_dir.is_absolute()
+        assert plan.target_dir.is_absolute()
+        assert plan.package_dir == package_dir
+        assert plan.target_dir == target_dir
 
     def test_simple_install_with_no_conflicts(self, tmp_path, monkeypatch):
         """Test planning install with no existing files."""
@@ -189,9 +196,7 @@ class TestPlanInstall:
         assert isinstance(plan.conflicts[0], FileConflict)
         assert len(plan.symlinks_to_create) == 0
 
-    def test_force_mode_moves_file_conflicts_to_create_list(
-        self, tmp_path, monkeypatch
-    ):
+    def test_force_mode_moves_file_conflicts_to_create_list(self, tmp_path):
         """Test that FORCE mode includes file conflicts in symlinks_to_create."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -210,9 +215,7 @@ class TestPlanInstall:
         assert len(plan.symlinks_to_create) == 1
         assert plan.symlinks_to_create[0].link_path == target_dir / "file1.txt"
 
-    def test_force_mode_does_not_include_directory_conflicts(
-        self, tmp_path, monkeypatch
-    ):
+    def test_force_mode_does_not_include_directory_conflicts(self, tmp_path):
         """Test FORCE mode excludes directory conflicts from symlinks."""
         package_dir = tmp_path / "package"
         package_dir.mkdir()
@@ -251,6 +254,56 @@ class TestPlanInstall:
         assert plan.symlinks_to_create[0].link_path == target_dir / "file2.txt"
 
 
+def test_plan_install_raises_when_collision_check_fails(tmp_path):
+    """Test that plan_install raises when package name collision detected."""
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+    (package_dir / "file.txt").write_text("content")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    with patch(
+        "haunt.operations.install.check_package_name_collision",
+        side_effect=PackageAlreadyInstalledError(
+            package_name="package",
+            existing_path="/other/path",
+            new_path=str(package_dir),
+        ),
+    ):
+        with pytest.raises(PackageAlreadyInstalledError):
+            plan_install(package_dir, target_dir)
+
+
+def test_plan_install_includes_unwanted_symlinks_in_plan(tmp_path):
+    """Test that plan includes unwanted symlinks from previous install."""
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+    (package_dir / "file1.txt").write_text("content1")
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    # Mock find_unwanted_symlinks to return some symlinks
+    unwanted = [
+        Symlink(
+            link_path=target_dir / "old_file.txt",
+            source_path=package_dir / "old_file.txt",
+        ),
+        Symlink(
+            link_path=target_dir / "another_old.txt",
+            source_path=package_dir / "another_old.txt",
+        ),
+    ]
+
+    with patch(
+        "haunt.operations.install.find_unwanted_symlinks", return_value=unwanted
+    ):
+        plan = plan_install(package_dir, target_dir)
+
+    # Plan should include the unwanted symlinks
+    assert len(plan.symlinks_to_remove) == 2
+    assert plan.symlinks_to_remove == unwanted
+
+
 class TestApplyInstall:
     """Tests for apply_install()."""
 
@@ -265,21 +318,24 @@ class TestApplyInstall:
         )
 
         # Create a plan with symlinks to create
+        symlinks = [
+            Symlink(
+                link_path=target_dir / "file1.txt",
+                source_path=package_dir / "file1.txt",
+            ),
+            Symlink(
+                link_path=target_dir / "file2.txt",
+                source_path=package_dir / "file2.txt",
+            ),
+        ]
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
-            symlinks_to_create=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=package_dir / "file1.txt",
-                ),
-                Symlink(
-                    link_path=target_dir / "file2.txt",
-                    source_path=package_dir / "file2.txt",
-                ),
-            ],
+            wanted_symlinks=symlinks,
+            symlinks_to_create=symlinks,
             conflicts=[],
+            symlinks_to_remove=[],
         )
 
         apply_install(plan)
@@ -300,17 +356,20 @@ class TestApplyInstall:
             "haunt._registry.Registry.default_path", lambda cls: registry_path
         )
 
+        symlinks = [
+            Symlink(
+                link_path=target_dir / "bashrc",
+                source_path=package_dir / "bashrc",
+            ),
+        ]
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
-            symlinks_to_create=[
-                Symlink(
-                    link_path=target_dir / "bashrc",
-                    source_path=package_dir / "bashrc",
-                ),
-            ],
+            wanted_symlinks=symlinks,
+            symlinks_to_create=symlinks,
             conflicts=[],
+            symlinks_to_remove=[],
         )
 
         apply_install(plan)
@@ -335,17 +394,20 @@ class TestApplyInstall:
             "haunt._registry.Registry.default_path", lambda cls: registry_path
         )
 
+        symlinks = [
+            Symlink(
+                link_path=target_dir / "config" / "nvim" / "init.vim",
+                source_path=package_dir / "config/nvim/init.vim",
+            ),
+        ]
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
-            symlinks_to_create=[
-                Symlink(
-                    link_path=target_dir / "config" / "nvim" / "init.vim",
-                    source_path=package_dir / "config/nvim/init.vim",
-                ),
-            ],
+            wanted_symlinks=symlinks,
+            symlinks_to_create=symlinks,
             conflicts=[],
+            symlinks_to_remove=[],
         )
 
         apply_install(plan)
@@ -369,8 +431,10 @@ class TestApplyInstall:
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[],
+            symlinks_to_remove=[],
         )
 
         apply_install(plan)
@@ -395,11 +459,16 @@ class TestApplyInstall:
             link_path=target_dir / "file1.txt",
             source_path=package_dir / "file1.txt",
         )
+        already_correct_symlink = Symlink(
+            link_path=target_dir / "file2.txt",
+            source_path=package_dir / "file2.txt",
+        )
 
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[new_symlink, already_correct_symlink],
             symlinks_to_create=[new_symlink],
             conflicts=[
                 CorrectSymlinkConflict(
@@ -409,6 +478,7 @@ class TestApplyInstall:
                     ),  # Relative path from readlink
                 )
             ],
+            symlinks_to_remove=[],
         )
 
         apply_install(plan)
@@ -441,12 +511,14 @@ class TestApplyInstall:
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[
                 DirectoryConflict(
                     path=target_dir / "somedir",
                 )
             ],
+            symlinks_to_remove=[],
         )
 
         with pytest.raises(ConflictError) as exc_info:
@@ -471,12 +543,14 @@ class TestApplyInstall:
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[
                 DirectoryConflict(
                     path=target_dir / "somedir",
                 )
             ],
+            symlinks_to_remove=[],
         )
 
         with pytest.raises(ConflictError) as exc_info:
@@ -499,12 +573,14 @@ class TestApplyInstall:
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[
                 FileConflict(
                     path=target_dir / "file.txt",
                 )
             ],
+            symlinks_to_remove=[],
         )
 
         with pytest.raises(ConflictError) as exc_info:
@@ -527,12 +603,14 @@ class TestApplyInstall:
             package_name="test-package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[
                 FileConflict(
                     path=target_dir / "file.txt",
                 )
             ],
+            symlinks_to_remove=[],
         )
 
         # Should not raise
@@ -558,8 +636,10 @@ class TestApplyInstall:
             package_name="shell",
             package_dir=package_dir1,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[],
+            symlinks_to_remove=[],
         )
         apply_install(plan1)
 
@@ -568,8 +648,10 @@ class TestApplyInstall:
             package_name="shell",
             package_dir=package_dir2,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[],
+            symlinks_to_remove=[],
         )
 
         with pytest.raises(PackageAlreadyInstalledError) as exc_info:
@@ -595,8 +677,10 @@ class TestApplyInstall:
             package_name="package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[],
+            symlinks_to_remove=[],
         )
         apply_install(plan1)
 
@@ -605,8 +689,10 @@ class TestApplyInstall:
             package_name="package",
             package_dir=package_dir,
             target_dir=target_dir,
+            wanted_symlinks=[],
             symlinks_to_create=[],
             conflicts=[],
+            symlinks_to_remove=[],
         )
         apply_install(plan2)  # Should not raise
 
@@ -614,3 +700,44 @@ class TestApplyInstall:
         registry = Registry(path=registry_path)
         assert "package" in registry.packages
         assert registry.packages["package"].package_dir == package_dir
+
+    def test_removes_unwanted_symlinks_from_plan(self, tmp_path, monkeypatch):
+        """Test that apply_install removes unwanted symlinks specified in plan."""
+        package_dir = tmp_path / "package"
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        registry_path = tmp_path / "registry.json"
+        monkeypatch.setattr(
+            "haunt._registry.Registry.default_path", lambda cls: registry_path
+        )
+
+        # Create some unwanted symlinks that exist on disk
+        unwanted_file1 = target_dir / "unwanted1.txt"
+        unwanted_file2 = target_dir / "unwanted2.txt"
+        unwanted_file1.write_text("will be removed")
+        unwanted_file2.symlink_to(package_dir / "old.txt")
+
+        plan = InstallPlan(
+            package_name="test-package",
+            package_dir=package_dir,
+            target_dir=target_dir,
+            wanted_symlinks=[],
+            symlinks_to_create=[],
+            conflicts=[],
+            symlinks_to_remove=[
+                Symlink(
+                    link_path=unwanted_file1,
+                    source_path=package_dir / "unwanted1.txt",
+                ),
+                Symlink(
+                    link_path=unwanted_file2,
+                    source_path=package_dir / "old.txt",
+                ),
+            ],
+        )
+
+        apply_install(plan)
+
+        # Only the symlink should be removed, not the regular file
+        assert unwanted_file1.exists()  # Regular file, not removed
+        assert not unwanted_file2.exists()  # Symlink, removed
