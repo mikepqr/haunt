@@ -237,13 +237,14 @@ haunt install ~/dotfiles
 
 The reinstall detects the file is now missing from its original location and creates the symlink.
 
-To remove a file from a package, delete it from the package directory, then uninstall and reinstall:
+To remove a file from a package, delete it from the package directory, then reinstall:
 
 ```bash
 rm ~/dotfiles/.vimrc
-haunt uninstall dotfiles
 haunt install ~/dotfiles
 ```
+
+The reinstall automatically removes symlinks for files that are no longer in the package.
 
 ## Git Integration
 
