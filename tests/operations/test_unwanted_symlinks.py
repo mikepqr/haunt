@@ -13,11 +13,6 @@ class TestFindUnwantedSymlinks:
 
     def test_returns_empty_when_package_not_in_registry(self, tmp_path, monkeypatch):
         """Test that no unwanted symlinks when package not in registry."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
 
@@ -34,11 +29,6 @@ class TestFindUnwantedSymlinks:
 
     def test_returns_empty_when_no_unwanted(self, tmp_path, monkeypatch):
         """Test no unwanted symlinks when all old symlinks are still wanted."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         target_dir = tmp_path / "target"
@@ -62,7 +52,7 @@ class TestFindUnwantedSymlinks:
             ),
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=package_dir,
@@ -90,11 +80,6 @@ class TestFindUnwantedSymlinks:
 
     def test_finds_unwanted_symlink_when_file_removed(self, tmp_path, monkeypatch):
         """Test that unwanted symlink is found when file removed from package."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         target_dir = tmp_path / "target"
@@ -116,7 +101,7 @@ class TestFindUnwantedSymlinks:
             ),
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=package_dir,
@@ -141,11 +126,6 @@ class TestFindUnwantedSymlinks:
 
     def test_does_not_include_modified_symlinks(self, tmp_path, monkeypatch):
         """Test that modified symlinks are not returned as unwanted."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         target_dir = tmp_path / "target"
@@ -164,7 +144,7 @@ class TestFindUnwantedSymlinks:
             ),
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=package_dir,
@@ -184,11 +164,6 @@ class TestFindUnwantedSymlinks:
 
     def test_wanted_symlinks_not_considered_unwanted(self, tmp_path, monkeypatch):
         """Test that symlinks in wanted set aren't considered unwanted."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         target_dir = tmp_path / "target"
@@ -206,7 +181,7 @@ class TestFindUnwantedSymlinks:
             ),
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=package_dir,
@@ -231,11 +206,6 @@ class TestFindUnwantedSymlinks:
 
     def test_handles_multiple_unwanted(self, tmp_path, monkeypatch):
         """Test finding multiple unwanted symlinks at once."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         package_dir = tmp_path / "package"
         package_dir.mkdir()
         target_dir = tmp_path / "target"
@@ -255,7 +225,7 @@ class TestFindUnwantedSymlinks:
             for i in range(1, 4)
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=package_dir,
@@ -284,11 +254,6 @@ class TestFindUnwantedSymlinks:
 
     def test_detects_unwanted_when_source_changes(self, tmp_path, monkeypatch):
         """Test that symlink is unwanted when source path changes."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         old_package_dir = tmp_path / "old_package"
         old_package_dir.mkdir()
         new_package_dir = tmp_path / "new_package"
@@ -308,7 +273,7 @@ class TestFindUnwantedSymlinks:
             ),
         ]
 
-        registry = Registry(path=registry_path)
+        registry = Registry()
         registry.packages["package"] = PackageEntry(
             name="package",
             package_dir=old_package_dir,

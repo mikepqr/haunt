@@ -312,11 +312,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create a plan with symlinks to create
         symlinks = [
             Symlink(
@@ -351,11 +346,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         symlinks = [
             Symlink(
                 link_path=target_dir / "bashrc",
@@ -375,7 +365,7 @@ class TestApplyInstall:
         apply_install(plan)
 
         # Check registry was updated
-        registry = Registry(path=registry_path)
+        registry = Registry()
         assert "test-package" in registry.packages
         entry = registry.packages["test-package"]
         assert entry.name == "test-package"
@@ -389,11 +379,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         symlinks = [
             Symlink(
                 link_path=target_dir / "config" / "nvim" / "init.vim",
@@ -422,11 +407,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
@@ -440,7 +420,7 @@ class TestApplyInstall:
         apply_install(plan)
 
         # Registry should still be updated
-        registry = Registry(path=registry_path)
+        registry = Registry()
         assert "test-package" in registry.packages
         assert registry.packages["test-package"].symlinks == []
 
@@ -449,11 +429,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create plan with one new symlink and one already-correct
         new_symlink = Symlink(
             link_path=target_dir / "file1.txt",
@@ -484,7 +459,7 @@ class TestApplyInstall:
         apply_install(plan)
 
         # Check registry includes both symlinks
-        registry = Registry(path=registry_path)
+        registry = Registry()
         entry = registry.packages["test-package"]
         assert len(entry.symlinks) == 2
 
@@ -502,11 +477,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
@@ -534,11 +504,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
@@ -564,11 +529,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
@@ -594,11 +554,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         plan = InstallPlan(
             package_name="test-package",
             package_dir=package_dir,
@@ -617,7 +572,7 @@ class TestApplyInstall:
         apply_install(plan, on_conflict=ConflictMode.SKIP)
 
         # Registry should still be updated
-        registry = Registry(path=registry_path)
+        registry = Registry()
         assert "test-package" in registry.packages
 
     def test_raises_for_package_name_collision(self, tmp_path, monkeypatch):
@@ -626,11 +581,6 @@ class TestApplyInstall:
         package_dir1 = tmp_path / "dotfiles1" / "shell"
         package_dir2 = tmp_path / "dotfiles2" / "shell"
         target_dir = tmp_path / "target"
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Install first package
         plan1 = InstallPlan(
             package_name="shell",
@@ -667,11 +617,6 @@ class TestApplyInstall:
         """Test reinstalling package from same path is allowed (idempotent)."""
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Install package
         plan1 = InstallPlan(
             package_name="package",
@@ -697,7 +642,7 @@ class TestApplyInstall:
         apply_install(plan2)  # Should not raise
 
         # Registry should still have the package
-        registry = Registry(path=registry_path)
+        registry = Registry()
         assert "package" in registry.packages
         assert registry.packages["package"].package_dir == package_dir
 
@@ -706,11 +651,6 @@ class TestApplyInstall:
         package_dir = tmp_path / "package"
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create some unwanted symlinks that exist on disk
         unwanted_file1 = target_dir / "unwanted1.txt"
         unwanted_file2 = target_dir / "unwanted2.txt"

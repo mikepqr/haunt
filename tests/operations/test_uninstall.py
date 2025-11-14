@@ -24,11 +24,6 @@ class TestPlanUninstall:
         package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create registry with package
         registry = Registry()
         registry.packages[package_dir.name] = PackageEntry(
@@ -71,11 +66,6 @@ class TestPlanUninstall:
         package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create registry with package
         registry = Registry()
         registry.packages[package_dir.name] = PackageEntry(
@@ -110,11 +100,6 @@ class TestPlanUninstall:
         """Test that error is raised for unknown package."""
         package_dir = tmp_path / "nonexistent"
         package_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create empty registry
         registry = Registry()
         registry.save()
@@ -130,11 +115,6 @@ class TestPlanUninstall:
         package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create registry with package
         registry = Registry()
         registry.packages[package_dir.name] = PackageEntry(
@@ -168,11 +148,6 @@ class TestPlanUninstall:
         package_dir.mkdir()
         target_dir = tmp_path / "target"
         target_dir.mkdir()
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Create registry with package
         registry = Registry()
         registry.packages[package_dir.name] = PackageEntry(
@@ -300,11 +275,6 @@ class TestApplyUninstall:
 
     def test_updates_registry(self, tmp_path, monkeypatch):
         """Test that package is removed from registry."""
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-
         # Mock registry
         mock_registry = Mock(spec=Registry)
         mock_registry.packages = {"test-package": Mock()}
