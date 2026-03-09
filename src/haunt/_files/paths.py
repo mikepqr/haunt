@@ -26,18 +26,6 @@ def normalize_package_dir(package_dir: Path) -> Path:
     return package_dir
 
 
-def normalize_target_dir(target_dir: Path) -> Path:
-    """Normalize target directory path to absolute.
-
-    Args:
-        target_dir: Directory where symlinks will be created
-
-    Returns:
-        Absolute path to target directory
-    """
-    return target_dir.resolve()
-
-
 def validate_install_directories(package_dir: Path, target_dir: Path) -> None:
     """Validate that package and target directories have a valid relationship.
 

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from haunt._files.discover import discover_files
 from haunt._files.paths import normalize_package_dir
-from haunt._files.paths import normalize_target_dir
 from haunt._files.paths import validate_install_directories
 from haunt._files.symlinks import check_conflict
 from haunt._files.symlinks import create_symlink
@@ -93,7 +92,7 @@ def plan_install(
         PackageAlreadyInstalledError: If package name exists from different directory
     """
     package_dir = normalize_package_dir(package_dir)
-    target_dir = normalize_target_dir(target_dir)
+    target_dir = target_dir.resolve()
     validate_install_directories(package_dir, target_dir)
 
     package_name = package_dir.name

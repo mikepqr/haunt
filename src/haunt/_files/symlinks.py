@@ -19,7 +19,7 @@ def check_conflict(symlink: Symlink) -> Conflict | None:
         Conflict if something exists at link_path, None if nothing exists.
         CorrectSymlinkConflict means symlink exists and points correctly.
     """
-    if not symlink.link_path.exists() and not symlink.link_path.is_symlink():
+    if symlink.is_missing():
         return None
 
     # Handle symlinks (including broken)
@@ -96,8 +96,7 @@ def create_symlink(symlink: Symlink, force: bool = False) -> None:
             )
 
         # Remove existing file or symlink if present (unlink removes link, not target)
-        if symlink.link_path.exists() or symlink.link_path.is_symlink():
-            symlink.link_path.unlink()
+        symlink.link_path.unlink(missing_ok=True)
 
     symlink.link_path.parent.mkdir(parents=True, exist_ok=True)
 

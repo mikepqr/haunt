@@ -226,7 +226,7 @@ def print_package_list(
             dt = datetime.fromisoformat(entry.installed_at)
             local_dt = dt.astimezone()
             timestamp = local_dt.strftime("%Y-%m-%d %H:%M:%S")
-        except (ValueError, AttributeError):
+        except ValueError:
             timestamp = entry.installed_at
         typer.echo(f"  Installed: {timestamp}")
 
@@ -285,12 +285,10 @@ def print_package_list(
                 for symlink_str, color in inconsistent_symlinks:
                     typer.secho(f"      {symlink_str}", fg=color)
 
-                package_dir_display = _display_path(entry.package_dir)
-                target_dir_display = _display_path(entry.target_dir)
                 typer.echo()
                 typer.secho("  To fix inconsistent symlinks:", fg=typer.colors.YELLOW)
                 typer.secho(
-                    f"    haunt install {package_dir_display} {target_dir_display}",
+                    f"    haunt install {package_display} {target_display}",
                     fg=typer.colors.YELLOW,
                 )
 
