@@ -4,9 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from haunt._files.paths import normalize_package_dir
 from haunt._files.paths import validate_install_directories
-from haunt.operations import normalize_package_dir
-from haunt.operations import normalize_target_dir
 
 
 class TestNormalizePackageDir:
@@ -50,43 +49,6 @@ class TestNormalizePackageDir:
 
         with pytest.raises(NotADirectoryError, match="not a directory"):
             normalize_package_dir(package_file)
-
-
-class TestNormalizeTargetDir:
-    """Tests for normalize_target_dir()."""
-
-    def test_resolves_to_absolute_path(self, tmp_path):
-        """Test that relative paths are resolved to absolute."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-
-        # Use relative path
-        import os
-
-        os.chdir(tmp_path)
-        result = normalize_target_dir(Path("target"))
-
-        assert result.is_absolute()
-        assert result == target_dir.resolve()
-
-    def test_already_absolute_path_unchanged(self, tmp_path):
-        """Test that absolute paths are resolved (may resolve symlinks)."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-
-        result = normalize_target_dir(target_dir)
-
-        assert result.is_absolute()
-        assert result == target_dir.resolve()
-
-    def test_does_not_validate_existence(self, tmp_path):
-        """Test that target_dir is not validated for existence."""
-        nonexistent = tmp_path / "nonexistent"
-
-        # Should not raise
-        result = normalize_target_dir(nonexistent)
-
-        assert result.is_absolute()
 
 
 class TestValidateInstallDirectories:

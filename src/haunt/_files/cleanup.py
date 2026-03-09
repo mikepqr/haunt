@@ -23,32 +23,21 @@ def remove_empty_directories(target_dir: Path, file_paths: list[Path]) -> list[P
     checked = set()  # Track directories we've already processed
 
     for file_path in file_paths:
-        # Validate that file_path is under target_dir
-        try:
-            file_path.relative_to(target_dir)
-        except ValueError as e:
-            raise ValueError(f"{file_path} is not under {target_dir}") from e
+        if not file_path.is_relative_to(target_dir):
+            raise ValueError(f"{file_path} is not under {target_dir}")
 
-        # Get the parent directory of this file
         current = file_path.parent
-
-        # Walk up the directory tree
         while current != target_dir:
-            # Skip if we've already checked this directory
             if current in checked:
                 break
             checked.add(current)
 
-            if not current.exists():
-                break
-
-            # Try to remove the directory (only works if empty)
             try:
                 current.rmdir()
                 removed.append(current)
                 current = current.parent
             except OSError:
-                # Directory not empty, stop walking up this branch
+                # Directory not empty or doesn't exist, stop walking up
                 break
 
     return removed

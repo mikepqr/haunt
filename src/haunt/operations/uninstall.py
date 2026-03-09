@@ -32,7 +32,7 @@ def plan_uninstall(package_name: str) -> UninstallPlan:
     modified_symlinks = []
 
     for symlink in entry.symlinks:
-        if not symlink.link_path.exists(follow_symlinks=False):
+        if symlink.is_missing():
             missing_symlinks.append(symlink.link_path)
         elif symlink.exists():
             symlinks_to_remove.append(symlink)

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Annotated
+from typing import NoReturn
 
 import typer
 
@@ -24,6 +25,14 @@ from haunt.operations import plan_install
 from haunt.operations import plan_uninstall
 
 app = typer.Typer(help="Symlink dotfiles manager")
+
+
+def _fatal(msg: str, *extra: str) -> NoReturn:
+    """Print red bold error to stderr, optional extra lines, and exit 1."""
+    typer.secho(f"✗ {msg}", fg=typer.colors.RED, bold=True, err=True)
+    for line in extra:
+        typer.secho(f"   {line}", err=True)
+    raise typer.Exit(1)
 
 
 def version_callback(value: bool) -> None:
@@ -65,6 +74,10 @@ def install(
     if target is None:
         target = Path.home()
 
+    partial_warning = (
+        "Warning: Package may be partially installed. "
+        "Check filesystem and registry manually."
+    )
     try:
         plan = plan_install(package, target, on_conflict=on_conflict)
         print_install_plan(plan, on_conflict=on_conflict, dry_run=dry_run)
@@ -72,48 +85,25 @@ def install(
         if not dry_run:
             apply_install(plan, on_conflict=on_conflict)
     except PackageAlreadyInstalledError as e:
-        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(str(e))
     except ConflictError as e:
         print_conflict_error(e, on_conflict)
         raise typer.Exit(1) from None
     except (RegistryValidationError, RegistryVersionError) as e:
-        typer.secho(f"✗ Registry error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Registry error: {e}")
     except PermissionError as e:
-        typer.secho(
-            f"✗ Permission denied: {e}", fg=typer.colors.RED, bold=True, err=True
-        )
-        raise typer.Exit(1) from None
+        _fatal(f"Permission denied: {e}")
     except FileExistsError as e:
-        typer.secho(
-            f"✗ File exists (filesystem changed between planning and execution): {e}",
-            fg=typer.colors.RED,
-            bold=True,
-            err=True,
+        _fatal(
+            f"File exists (filesystem changed between planning and execution): {e}",
+            partial_warning,
         )
-        typer.secho(
-            "   Warning: Package may be partially installed. Check "
-            "filesystem and registry manually.",
-            err=True,
-        )
-        raise typer.Exit(1) from None
     except ValueError as e:
-        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(str(e))
     except OSError as e:
-        typer.secho(
-            f"✗ Filesystem error: {e}", fg=typer.colors.RED, bold=True, err=True
-        )
-        typer.secho(
-            "   Warning: Package may be partially installed. Check "
-            "filesystem and registry manually.",
-            err=True,
-        )
-        raise typer.Exit(1) from None
+        _fatal(f"Filesystem error: {e}", partial_warning)
     except HauntError as e:
-        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Error: {e}")
 
 
 @app.command()
@@ -132,14 +122,11 @@ def list(
         registry = Registry()
         print_package_list(registry, package_name=package, verbose=verbose)
     except PackageNotFoundError as e:
-        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(str(e))
     except (RegistryValidationError, RegistryVersionError) as e:
-        typer.secho(f"✗ Registry error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Registry error: {e}")
     except HauntError as e:
-        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Error: {e}")
 
 
 @app.command()
@@ -157,29 +144,19 @@ def uninstall(
         if not dry_run:
             apply_uninstall(plan)
     except PackageNotFoundError as e:
-        typer.secho(f"✗ {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(str(e))
     except (RegistryValidationError, RegistryVersionError) as e:
-        typer.secho(f"✗ Registry error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Registry error: {e}")
     except PermissionError as e:
-        typer.secho(
-            f"✗ Permission denied: {e}", fg=typer.colors.RED, bold=True, err=True
-        )
-        raise typer.Exit(1) from None
+        _fatal(f"Permission denied: {e}")
     except OSError as e:
-        typer.secho(
-            f"✗ Filesystem error: {e}", fg=typer.colors.RED, bold=True, err=True
+        _fatal(
+            f"Filesystem error: {e}",
+            "Warning: Package may be partially uninstalled. "
+            "Check filesystem and registry manually.",
         )
-        typer.secho(
-            "   Warning: Package may be partially uninstalled. Check "
-            "filesystem and registry manually.",
-            err=True,
-        )
-        raise typer.Exit(1) from None
     except HauntError as e:
-        typer.secho(f"✗ Error: {e}", fg=typer.colors.RED, bold=True, err=True)
-        raise typer.Exit(1) from None
+        _fatal(f"Error: {e}")
 
 
 def main() -> None:
