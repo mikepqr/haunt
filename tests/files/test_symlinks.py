@@ -38,6 +38,23 @@ class TestSymlink:
             "../../../package/config/nvim/init.vim"
         )
 
+    @pytest.mark.parametrize("real_dir", ["real", "deeply/nested/real"])
+    def test_relative_source_path_reaches_source_through_symlinked_directory(
+        self, tmp_path, real_dir
+    ):
+        """A link placed in a symlinked directory must still reach its source."""
+        source = tmp_path / "package" / "config" / "app.toml"
+        source.parent.mkdir(parents=True)
+        source.write_text("content")
+        (tmp_path / real_dir).mkdir(parents=True)
+        (tmp_path / "target").mkdir()
+        (tmp_path / "target" / "config").symlink_to(tmp_path / real_dir)
+        link = tmp_path / "target" / "config" / "app.toml"
+
+        link.symlink_to(Symlink(link, source).relative_source_path)
+
+        assert link.read_text() == "content"
+
     def test_points_to_with_relative_path(self, tmp_path):
         """Test points_to with a relative path target."""
         link_path = tmp_path / "target" / "file.txt"
