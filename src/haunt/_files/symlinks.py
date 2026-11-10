@@ -1,104 +1,55 @@
 """Symlink operations."""
 
-from haunt.models import BrokenSymlinkConflict
-from haunt.models import Conflict
-from haunt.models import CorrectSymlinkConflict
-from haunt.models import DifferentSymlinkConflict
-from haunt.models import DirectoryConflict
-from haunt.models import FileConflict
+from collections.abc import Iterable
+from pathlib import Path
+
+from haunt.exceptions import StalePlanError
+from haunt.models import LinkState
 from haunt.models import Symlink
 
 
-def check_conflict(symlink: Symlink) -> Conflict | None:
-    """Check if a symlink conflicts with existing files.
+def observe(symlink: Symlink) -> LinkState:
+    """Classify what currently occupies symlink.link_path."""
+    link = symlink.link_path
+    if not link.exists(follow_symlinks=False):
+        if any(_is_non_directory(ancestor) for ancestor in link.parents):
+            return LinkState.PARENT_NOT_DIRECTORY
+        return LinkState.ABSENT
+    if _is_same_entry(link, symlink.source_path):
+        return LinkState.IS_SOURCE
+    if link.is_symlink():
+        if symlink.points_to(link.readlink()):
+            return LinkState.CORRECT
+        return LinkState.FOREIGN_LINK if link.exists() else LinkState.BROKEN_LINK
+    return LinkState.DIRECTORY if link.is_dir() else LinkState.FILE
 
-    Args:
-        symlink: Symlink to check for conflicts (source_path should be absolute)
 
-    Returns:
-        Conflict if something exists at link_path, None if nothing exists.
-        CorrectSymlinkConflict means symlink exists and points correctly.
+def _is_non_directory(path: Path) -> bool:
+    """True for a file, or a symlink that does not lead to a directory."""
+    return path.exists(follow_symlinks=False) and not path.is_dir()
+
+
+def _is_same_entry(a: Path, b: Path) -> bool:
+    """True if a and b name the same directory entry, not merely the same file."""
+    return a.parent.resolve() / a.name == b.parent.resolve() / b.name
+
+
+def ensure_unchanged(expected: Iterable[tuple[Symlink, LinkState]]) -> None:
+    """Raise StalePlanError unless every symlink is still in its expected state.
+
+    Plans are applied compare-and-swap: this runs before the first change, so
+    a plan the filesystem has moved on from is rejected whole.
     """
-    if symlink.is_missing():
-        return None
-
-    # Handle symlinks (including broken)
-    if symlink.link_path.is_symlink():
-        actual_target = symlink.link_path.readlink()
-
-        if symlink.exists():
-            return CorrectSymlinkConflict(
-                path=symlink.link_path,
-                points_to=actual_target,
-            )
-
-        # Symlink points to wrong location - check if broken
-        if not symlink.link_path.exists():
-            return BrokenSymlinkConflict(
-                path=symlink.link_path,
-                points_to=actual_target,
-            )
-
-        # Symlink points to different location (but target exists)
-        return DifferentSymlinkConflict(
-            path=symlink.link_path,
-            points_to=actual_target,
-        )
-
-    if symlink.link_path.is_dir():
-        return DirectoryConflict(path=symlink.link_path)
-    else:
-        return FileConflict(path=symlink.link_path)
+    stale = [s.link_path for s, state in expected if observe(s) is not state]
+    if stale:
+        raise StalePlanError(stale)
 
 
-def remove_symlink(symlink: Symlink) -> None:
-    """Remove a symlink if it points to the expected source.
-
-    Args:
-        symlink: Symlink to remove (source_path should be absolute)
+def create_symlink(symlink: Symlink) -> None:
+    """Create a relative symlink at link_path, making parent directories.
 
     Raises:
-        FileNotFoundError: If link_path doesn't exist (from readlink or unlink)
-        ValueError: If link_path points to wrong source
-        OSError: If link_path is not a symlink (from readlink)
+        FileExistsError: If something already exists at link_path
     """
-    if symlink.exists():
-        symlink.link_path.unlink()
-    else:
-        actual_target = symlink.link_path.readlink()
-        raise ValueError(
-            f"Symlink points to {actual_target}, expected {symlink.source_path}"
-        )
-
-
-def create_symlink(symlink: Symlink, force: bool = False) -> None:
-    """Create a symlink.
-
-    Args:
-        symlink: Symlink to create (source_path should be absolute)
-        force: If True, remove existing files/symlinks (but not directories)
-
-    Raises:
-        IsADirectoryError: If force=True and link_path is a directory
-        FileExistsError: If something exists at link_path (filesystem changed
-            after planning)
-    """
-    if symlink.exists():
-        return
-
-    # In force mode, remove existing files/symlinks (but not directories)
-    if force:
-        # Check if it's a real directory (is_dir follows symlinks, so we need
-        # both checks)
-        if symlink.link_path.is_dir() and not symlink.link_path.is_symlink():
-            raise IsADirectoryError(
-                f"Cannot force-create symlink: {symlink.link_path} is a directory"
-            )
-
-        # Remove existing file or symlink if present (unlink removes link, not target)
-        symlink.link_path.unlink(missing_ok=True)
-
     symlink.link_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Create the symlink with relative path
     symlink.link_path.symlink_to(symlink.relative_source_path)

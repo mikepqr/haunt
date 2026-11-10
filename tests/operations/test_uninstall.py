@@ -1,332 +1,112 @@
-"""Tests for uninstall operations."""
+"""Tests for plan_uninstall() and apply_uninstall()."""
 
-from pathlib import Path
-from unittest.mock import Mock
-from unittest.mock import patch
+import shutil
 
 import pytest
 
+from haunt import apply_install
+from haunt import apply_uninstall
+from haunt import plan_install
+from haunt import plan_uninstall
 from haunt._registry import Registry
 from haunt.exceptions import PackageNotFoundError
-from haunt.models import PackageEntry
-from haunt.models import Symlink
-from haunt.models import UninstallPlan
-from haunt.operations import apply_uninstall
-from haunt.operations import plan_uninstall
+from haunt.exceptions import StalePlanError
+from haunt.models import LinkState
 
 
-class TestPlanUninstall:
-    """Tests for plan_uninstall()."""
-
-    def test_simple_uninstall(self, tmp_path, monkeypatch):
-        """Test planning uninstall for a simple package."""
-        package_dir = tmp_path / "package"
-        package_dir.mkdir()
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        # Create registry with package
-        registry = Registry()
-        registry.packages[package_dir.name] = PackageEntry(
-            name=package_dir.name,
-            package_dir=package_dir,
-            target_dir=target_dir,
-            symlinks=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=package_dir / "file1.txt",
-                ),
-                Symlink(
-                    link_path=target_dir / "file2.txt",
-                    source_path=package_dir / "file2.txt",
-                ),
-            ],
-            installed_at="2025-01-01T00:00:00Z",
-        )
-        registry.save()
-
-        # Create the symlinks
-        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
-        (target_dir / "file2.txt").symlink_to(Path("../package/file2.txt"))
-
-        plan = plan_uninstall(package_dir.name)
-
-        assert plan.package_name == package_dir.name
-        assert plan.target_dir == target_dir
-        assert len(plan.symlinks_to_remove) == 2
-        assert len(plan.missing_symlinks) == 0
-        assert len(plan.modified_symlinks) == 0
-
-        link_paths = {s.link_path for s in plan.symlinks_to_remove}
-        assert target_dir / "file1.txt" in link_paths
-        assert target_dir / "file2.txt" in link_paths
-
-    def test_detects_missing_symlinks(self, tmp_path, monkeypatch):
-        """Test that missing symlinks are reported."""
-        package_dir = tmp_path / "package"
-        package_dir.mkdir()
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        # Create registry with package
-        registry = Registry()
-        registry.packages[package_dir.name] = PackageEntry(
-            name=package_dir.name,
-            package_dir=package_dir,
-            target_dir=target_dir,
-            symlinks=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=package_dir / "file1.txt",
-                ),
-                Symlink(
-                    link_path=target_dir / "file2.txt",
-                    source_path=package_dir / "file2.txt",
-                ),
-            ],
-            installed_at="2025-01-01T00:00:00Z",
-        )
-        registry.save()
-
-        # Only create one symlink
-        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
-
-        plan = plan_uninstall(package_dir.name)
-
-        assert len(plan.symlinks_to_remove) == 1
-        assert len(plan.missing_symlinks) == 1
-        assert len(plan.modified_symlinks) == 0
-        assert target_dir / "file2.txt" in plan.missing_symlinks
-
-    def test_raises_for_unknown_package(self, tmp_path, monkeypatch):
-        """Test that error is raised for unknown package."""
-        package_dir = tmp_path / "nonexistent"
-        package_dir.mkdir()
-        # Create empty registry
-        registry = Registry()
-        registry.save()
-
-        with pytest.raises(PackageNotFoundError) as exc_info:
-            plan_uninstall(package_dir.name)
-
-        assert package_dir.name in str(exc_info.value)
-
-    def test_computes_correct_source_paths(self, tmp_path, monkeypatch):
-        """Test that symlinks have correct source paths for verification."""
-        package_dir = tmp_path / "package"
-        package_dir.mkdir()
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        # Create registry with package
-        registry = Registry()
-        registry.packages[package_dir.name] = PackageEntry(
-            name=package_dir.name,
-            package_dir=package_dir,
-            target_dir=target_dir,
-            symlinks=[
-                Symlink(
-                    link_path=target_dir / "bashrc",
-                    source_path=package_dir / "bashrc",
-                ),
-            ],
-            installed_at="2025-01-01T00:00:00Z",
-        )
-        registry.save()
-
-        # Create symlink
-        (target_dir / "bashrc").symlink_to(Path("../package/bashrc"))
-
-        plan = plan_uninstall(package_dir.name)
-
-        assert len(plan.symlinks_to_remove) == 1
-        symlink = plan.symlinks_to_remove[0]
-        assert symlink.link_path == target_dir / "bashrc"
-        # Source should be absolute path
-        assert symlink.source_path == package_dir / "bashrc"
-
-    def test_detects_modified_symlinks(self, tmp_path, monkeypatch):
-        """Test that symlinks pointing to wrong targets are detected as modified."""
-        package_dir = tmp_path / "package"
-        package_dir.mkdir()
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
-        # Create registry with package
-        registry = Registry()
-        registry.packages[package_dir.name] = PackageEntry(
-            name=package_dir.name,
-            package_dir=package_dir,
-            target_dir=target_dir,
-            symlinks=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=package_dir / "file1.txt",
-                ),
-                Symlink(
-                    link_path=target_dir / "file2.txt",
-                    source_path=package_dir / "file2.txt",
-                ),
-            ],
-            installed_at="2025-01-01T00:00:00Z",
-        )
-        registry.save()
-
-        # Create one correct symlink and one modified symlink
-        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
-        # file2.txt points to wrong target (user modified it)
-        (target_dir / "file2.txt").symlink_to(Path("../other/file2.txt"))
-
-        plan = plan_uninstall(package_dir.name)
-
-        # Should remove the correct symlink
-        assert len(plan.symlinks_to_remove) == 1
-        assert plan.symlinks_to_remove[0].link_path == target_dir / "file1.txt"
-
-        # Should detect the modified symlink
-        assert len(plan.modified_symlinks) == 1
-        assert plan.modified_symlinks[0].link_path == target_dir / "file2.txt"
-
-        # Should have no missing symlinks
-        assert len(plan.missing_symlinks) == 0
+@pytest.fixture
+def installed(package, target):
+    """The package, installed into a target that also holds the user's own files."""
+    (target / "config").mkdir()
+    (target / "config" / "mine.toml").write_text("user data")
+    (target / "notes").write_text("user data")
+    apply_install(plan_install(package, target))
 
 
-class TestApplyUninstall:
-    """Tests for apply_uninstall()."""
+def uninstall(package_name="package"):
+    plan = plan_uninstall(package_name)
+    apply_uninstall(plan)
+    return plan
 
-    def test_removes_symlinks_from_plan(self, tmp_path, monkeypatch):
-        """Test that symlinks in plan are removed."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
 
-        # Create symlinks
-        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
-        (target_dir / "file2.txt").symlink_to(Path("../package/file2.txt"))
+def test_uninstall_undoes_install(package, target, snapshot):
+    before = snapshot(target)
+    apply_install(plan_install(package, target))
 
-        # Create plan directly
-        plan = UninstallPlan(
-            package_name="test-package",
-            target_dir=target_dir,
-            symlinks_to_remove=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=tmp_path / "package" / "file1.txt",
-                ),
-                Symlink(
-                    link_path=target_dir / "file2.txt",
-                    source_path=tmp_path / "package" / "file2.txt",
-                ),
-            ],
-            missing_symlinks=[],
-            modified_symlinks=[],
-        )
+    uninstall()
 
-        # Mock registry
-        mock_registry = Mock(spec=Registry)
-        mock_registry.packages = {"test-package": Mock()}
+    assert snapshot(target) == before
+    assert Registry().packages == {}
 
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-        with patch("haunt.operations.uninstall.Registry", return_value=mock_registry):
-            apply_uninstall(plan)
 
-        # Check symlinks were removed
-        assert not (target_dir / "file1.txt").exists()
-        assert not (target_dir / "file2.txt").exists()
+@pytest.mark.usefixtures("installed")
+def test_uninstall_leaves_the_users_own_files(target, snapshot):
+    uninstall()
 
-    def test_removes_empty_directories(self, tmp_path, monkeypatch):
-        """Test that empty directories are cleaned up."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
+    assert snapshot(target) == {
+        "config": "directory",
+        "config/mine.toml": "file: user data",
+        "notes": "file: user data",
+    }
 
-        # Create nested symlink
-        (target_dir / "config" / "nvim").mkdir(parents=True)
-        (target_dir / "config" / "nvim" / "init.vim").symlink_to(
-            Path("../../../package/config/nvim/init.vim")
-        )
 
-        # Create plan directly
-        plan = UninstallPlan(
-            package_name="test-package",
-            target_dir=target_dir,
-            symlinks_to_remove=[
-                Symlink(
-                    link_path=target_dir / "config" / "nvim" / "init.vim",
-                    source_path=tmp_path / "package" / "config/nvim/init.vim",
-                ),
-            ],
-            missing_symlinks=[],
-            modified_symlinks=[],
-        )
+@pytest.mark.usefixtures("installed")
+def test_planning_changes_nothing(tmp_path, snapshot):
+    before = snapshot(tmp_path)
 
-        # Mock registry
-        mock_registry = Mock(spec=Registry)
-        mock_registry.packages = {"test-package": Mock()}
+    plan_uninstall("package")
 
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-        with patch("haunt.operations.uninstall.Registry", return_value=mock_registry):
-            apply_uninstall(plan)
+    assert snapshot(tmp_path) == before
 
-        # Check symlink and empty dirs were removed
-        assert not (target_dir / "config" / "nvim" / "init.vim").exists()
-        assert not (target_dir / "config" / "nvim").exists()
-        assert not (target_dir / "config").exists()
 
-    def test_updates_registry(self, tmp_path, monkeypatch):
-        """Test that package is removed from registry."""
-        # Mock registry
-        mock_registry = Mock(spec=Registry)
-        mock_registry.packages = {"test-package": Mock()}
+@pytest.mark.usefixtures("installed")
+def test_uninstall_works_after_the_package_is_deleted(package, target):
+    shutil.rmtree(package)
 
-        with patch("haunt.operations.uninstall.Registry", return_value=mock_registry):
-            # Create plan directly
-            plan = UninstallPlan(
-                package_name="test-package",
-                target_dir=tmp_path / "target",
-                symlinks_to_remove=[],
-                missing_symlinks=[],
-                modified_symlinks=[],
-            )
+    uninstall()
 
-            apply_uninstall(plan)
+    assert not (target / "bashrc").is_symlink()
+    assert not (target / "config" / "app.toml").is_symlink()
 
-        # Check package was removed from registry
-        assert "test-package" not in mock_registry.packages
-        mock_registry.save.assert_called_once_with()
 
-    def test_handles_missing_symlinks_in_plan(self, tmp_path, monkeypatch):
-        """Test that plans with missing symlinks don't cause errors."""
-        target_dir = tmp_path / "target"
-        target_dir.mkdir()
+def test_unknown_package_raises():
+    with pytest.raises(PackageNotFoundError):
+        plan_uninstall("nonexistent")
 
-        # Create symlink
-        (target_dir / "file1.txt").symlink_to(Path("../package/file1.txt"))
 
-        # Create plan with missing symlinks reported
-        plan = UninstallPlan(
-            package_name="test-package",
-            target_dir=target_dir,
-            symlinks_to_remove=[
-                Symlink(
-                    link_path=target_dir / "file1.txt",
-                    source_path=tmp_path / "package" / "file1.txt",
-                ),
-            ],
-            missing_symlinks=["file2.txt"],
-            modified_symlinks=[],
-        )
+@pytest.mark.parametrize("state", [s for s in LinkState if s is not LinkState.CORRECT])
+def test_only_removes_links_that_are_still_as_installed(
+    package, target, nested, occupy, snapshot, state
+):
+    """Whatever has since happened to a link path, uninstall leaves it alone,
+    still removes the package's other links, and forgets the package."""
+    apply_install(plan_install(package, target))
+    occupy(nested, state)
+    target_before, package_before = snapshot(target), snapshot(package)
 
-        # Mock registry
-        mock_registry = Mock(spec=Registry)
-        mock_registry.packages = {"test-package": Mock()}
+    plan = uninstall()
 
-        registry_path = tmp_path / "registry.json"
-        monkeypatch.setattr(
-            "haunt._registry.Registry.default_path", lambda cls: registry_path
-        )
-        with patch("haunt.operations.uninstall.Registry", return_value=mock_registry):
-            apply_uninstall(plan)
+    missing = state in (LinkState.ABSENT, LinkState.PARENT_NOT_DIRECTORY)
+    assert [s.link_path for s in plan.symlinks_to_remove] == [target / "bashrc"]
+    assert plan.missing_symlinks == ([nested.link_path] if missing else [])
+    assert plan.modified_symlinks == ([] if missing else [nested])
+    del target_before["bashrc"]
+    assert snapshot(target) == target_before
+    assert snapshot(package) == package_before
+    assert Registry().packages == {}
 
-        # Should complete without error
-        assert not (target_dir / "file1.txt").exists()
+
+@pytest.mark.usefixtures("installed")
+def test_refuses_when_a_link_has_changed_since_planning(
+    target, nested, occupy, snapshot
+):
+    plan = plan_uninstall("package")
+    occupy(nested, LinkState.FILE)
+    before = snapshot(target)
+
+    with pytest.raises(StalePlanError) as excinfo:
+        apply_uninstall(plan)
+
+    assert excinfo.value.paths == [nested.link_path]
+    assert snapshot(target) == before
+    assert "package" in Registry().packages

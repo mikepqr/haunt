@@ -42,8 +42,7 @@ $ haunt install ~/dotfiles
 Creating symlinks:
   /Users/mike/.bashrc -> /Users/mike/dotfiles/.bashrc
   /Users/mike/.config/nvim/init.lua -> /Users/mike/dotfiles/.config/nvim/init.lua
-
-2 symlinks created
+✓ Installed dotfiles (2 symlinks created)
 ```
 
 The files in the package are symlinked from your home folder, and existing files are preserved.
@@ -67,8 +66,7 @@ $ haunt uninstall dotfiles
 Removing symlinks:
   /Users/mike/.bashrc
   /Users/mike/.config/nvim/init.lua
-
-2 symlinks removed
+✓ Uninstalled dotfiles (2 symlinks removed)
 ```
 
 To see all installed packages, use `haunt list`.
@@ -86,7 +84,7 @@ haunt install [OPTIONS] PACKAGE [TARGET]
 - `--dry-run, -n` - show what would happen without doing it
 - `--on-conflict` - how to handle conflicts:
   - `abort` (default) - stop if any files exist
-  - `skip` - skip conflicting files, install the rest
+  - `skip` - leave conflicting paths alone, install the rest
   - `force` - replace files/symlinks (but never directories)
 
 ### `haunt uninstall`
@@ -152,6 +150,7 @@ Inconsistent symlink types:
 - `(link missing)`: symlink doesn't exist at expected location
 - `(expected ...)`: symlink points to wrong target
 - `(source file missing)`: symlink exists but source file is gone
+- `(file)`, `(directory)`: something other than a symlink is at the link's location
 
 ## Conflict handling
 
@@ -164,9 +163,13 @@ $ haunt install ~/.dotfiles
   /Users/mike/.bashrc (file)
 ```
 
-Use `--on-conflict=skip` to install non-conflicting files, or `--on-conflict=force` to replace files and broken symlinks.
+Use `--on-conflict=skip` to install non-conflicting files, or `--on-conflict=force` to replace files and symlinks. `--dry-run` reports the same conflicts without changing anything.
 
 `haunt` will never replace existing directories with symlinks, even with `--on-conflict=force`.
+
+Nor will it touch a path that is really one of the package's own files, which happens when a directory in the target is itself a symlink into the package (GNU stow creates these when it "folds" a directory). Remove that directory symlink first, for example with `stow -D`, then install.
+
+If the filesystem changes between `haunt` deciding what to do and doing it, `haunt` stops before making any change.
 
 ## Multiple packages
 
@@ -190,14 +193,12 @@ $ haunt install ~/dotfiles/shell
 Creating symlinks:
   /Users/mike/.bashrc -> /Users/mike/dotfiles/shell/.bashrc
   /Users/mike/.config/starship.toml -> /Users/mike/dotfiles/shell/.config/starship.toml
-
-2 symlinks created
+✓ Installed shell (2 symlinks created)
 
 $ haunt install ~/dotfiles/nvim
 Creating symlinks:
   /Users/mike/.config/nvim/init.lua -> /Users/mike/dotfiles/nvim/.config/nvim/init.lua
-
-1 symlink created
+✓ Installed nvim (1 symlink created)
 ```
 
 Result:
@@ -218,8 +219,7 @@ $ haunt uninstall shell
 Removing symlinks:
   /Users/mike/.bashrc
   /Users/mike/.config/starship.toml
-
-2 symlinks removed
+✓ Uninstalled shell (2 symlinks removed)
 
 # .config/nvim/init.lua remains untouched
 ```

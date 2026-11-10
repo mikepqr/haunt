@@ -1,8 +1,17 @@
 """Custom exceptions for haunt."""
 
+from collections.abc import Iterable
 from collections.abc import Sequence
+from pathlib import Path
 
-from haunt.models import Conflict
+from haunt.models import PlannedLink
+
+
+def _summarize(paths: Iterable[Path]) -> str:
+    """List the first few paths, with a total if there are more."""
+    paths = list(paths)
+    shown = ", ".join(str(p) for p in paths[:3])
+    return f"{shown}, ... ({len(paths)} total)" if len(paths) > 3 else shown
 
 
 class HauntError(Exception):
@@ -29,14 +38,23 @@ class PackageAlreadyInstalledError(HauntError):
 
 
 class ConflictError(HauntError):
-    """Conflicts exist and on_conflict=abort."""
+    """Existing paths block the install under the chosen conflict mode."""
 
-    def __init__(self, conflicts: Sequence[Conflict]):
+    def __init__(self, conflicts: Sequence[PlannedLink]):
         self.conflicts = conflicts
-        conflict_paths = ", ".join(str(c.path) for c in conflicts[:3])
-        if len(conflicts) > 3:
-            conflict_paths += f", ... ({len(conflicts)} total)"
-        super().__init__(f"Conflicts detected: {conflict_paths}")
+        super().__init__(
+            f"Conflicts detected: {_summarize(c.symlink.link_path for c in conflicts)}"
+        )
+
+
+class StalePlanError(HauntError):
+    """The filesystem no longer matches what a plan observed."""
+
+    def __init__(self, paths: Sequence[Path]):
+        self.paths = paths
+        super().__init__(
+            f"Filesystem changed since planning, nothing was done: {_summarize(paths)}"
+        )
 
 
 class RegistryValidationError(HauntError):
