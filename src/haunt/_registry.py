@@ -44,6 +44,8 @@ class Registry:
                 raise RegistryValidationError(
                     f"Missing required field in registry: {e}"
                 ) from e
+            except (TypeError, AttributeError) as e:
+                raise RegistryValidationError(f"Malformed registry: {e}") from e
 
     @classmethod
     def default_path(cls) -> Path:
