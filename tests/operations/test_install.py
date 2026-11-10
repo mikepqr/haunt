@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from haunt import apply_install
+from haunt import apply_uninstall
 from haunt import plan_install
+from haunt import plan_uninstall
+from haunt._files.symlinks import create_symlink
 from haunt._files.symlinks import observe
 from haunt._registry import Registry
 from haunt.exceptions import ConflictError
@@ -193,6 +196,62 @@ class TestStalePlan:
             apply_install(plan)
 
         assert snapshot(target) == before
+
+
+def fail_after(successes, function):
+    """Wrap function so that it raises OSError once it has succeeded n times."""
+    remaining = iter(range(successes))
+
+    def wrapper(*args, **kwargs):
+        if next(remaining, None) is None:
+            raise OSError("simulated failure")
+        return function(*args, **kwargs)
+
+    return wrapper
+
+
+class TestInterruptedInstall:
+    """An install that fails part-way leaves nothing haunt doesn't know about."""
+
+    @pytest.fixture
+    def interrupted(self, package, target, monkeypatch):
+        """Install the package, failing after the first link is created."""
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                "haunt.operations.install.create_symlink", fail_after(1, create_symlink)
+            )
+            with pytest.raises(OSError, match="simulated"):
+                install(package, target)
+        assert (target / "bashrc").is_symlink()
+
+    @pytest.mark.usefixtures("interrupted")
+    def test_can_be_uninstalled(self, target, snapshot):
+        apply_uninstall(plan_uninstall("package"))
+
+        assert snapshot(target) == {}
+
+    @pytest.mark.usefixtures("interrupted")
+    def test_can_be_completed_by_installing_again(self, package, target):
+        plan = install(package, target)
+
+        assert [link.action for link in plan.links] == [Action.KEEP, Action.CREATE]
+        assert (target / "config" / "app.toml").read_text() == "app contents"
+
+    def test_orphans_not_yet_removed_are_still_known(
+        self, package, target, snapshot, monkeypatch
+    ):
+        install(package, target)
+        (package / "bashrc").unlink()
+        shutil.rmtree(package / "config")
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "unlink", fail_after(1, Path.unlink))
+            with pytest.raises(OSError, match="simulated"):
+                install(package, target)
+        assert len([p for p in target.rglob("*") if p.is_symlink()]) == 1
+
+        apply_uninstall(plan_uninstall("package"))
+
+        assert snapshot(target) == {}
 
 
 class TestPackageNameCollision:
