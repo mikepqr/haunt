@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 from enum import Enum
+from enum import StrEnum
+from enum import auto
 from pathlib import Path
 from typing import Self
 from typing import TypedDict
@@ -48,53 +50,6 @@ class Symlink:
         target_resolved = (self.link_path.parent / target).resolve()
         return target_resolved == self.source_path.resolve()
 
-    def exists(self) -> bool:
-        """Check if link_path exists as a symlink pointing to source_path.
-
-        Note: this does not verify that source_path exists!
-
-        Returns:
-            True if link_path is a symlink that points to source_path
-        """
-        if not self.link_path.is_symlink():
-            return False
-        actual_target = self.link_path.readlink()
-        return self.points_to(actual_target)
-
-    def is_missing(self) -> bool:
-        """Check if the symlink doesn't exist at link_path.
-
-        Returns:
-            True if link_path doesn't exist at all
-        """
-        return not self.link_path.exists(follow_symlinks=False)
-
-    def is_modified(self) -> bool:
-        """Check if symlink exists but points to wrong target.
-
-        Returns:
-            True if link_path exists but doesn't point to source_path
-        """
-        return self.link_path.exists(follow_symlinks=False) and not self.exists()
-
-    def source_exists(self) -> bool:
-        """Check if the source file exists.
-
-        Returns:
-            True if source_path exists
-        """
-        return self.source_path.exists()
-
-    def get_actual_target(self) -> Path | None:
-        """Get the actual target the symlink points to.
-
-        Returns:
-            The path the symlink points to, or None if link_path is not a symlink
-        """
-        if not self.link_path.is_symlink():
-            return None
-        return self.link_path.readlink()
-
 
 @dataclass
 class PackageEntry:
@@ -104,7 +59,7 @@ class PackageEntry:
     package_dir: Path  # Absolute path to package directory
     target_dir: Path  # Where symlinks were installed
     symlinks: list[Symlink]  # Symlinks that were created
-    installed_at: str  # UTC ISO 8601 timestamp
+    installed_at: str  # ISO 8601 timestamp with UTC offset
 
     def to_dict(self) -> PackageEntryDict:
         """Convert to JSON-serializable dict."""
@@ -140,55 +95,39 @@ class PackageEntry:
         )
 
 
-@dataclass
-class FileConflict:
-    """Conflict with a regular file."""
+class LinkState(Enum):
+    """What currently occupies a Symlink's link_path.
 
-    path: Path
+    Every operation (install, uninstall, list) starts from this one
+    classification, made by haunt._files.symlinks.observe().
+    """
 
-
-@dataclass
-class DirectoryConflict:
-    """Conflict with a directory."""
-
-    path: Path
-
-
-@dataclass
-class CorrectSymlinkConflict:
-    """Conflict with a symlink that points to the correct target."""
-
-    path: Path
-    points_to: Path  # Where the symlink currently points (relative)
-
-
-@dataclass
-class BrokenSymlinkConflict:
-    """Conflict with a broken symlink."""
-
-    path: Path
-    points_to: Path  # Where the symlink points (relative, but target doesn't exist)
+    ABSENT = auto()  # Nothing there
+    CORRECT = auto()  # Symlink to source_path
+    FOREIGN_LINK = auto()  # Symlink to something else that exists
+    BROKEN_LINK = auto()  # Symlink to something else that does not exist
+    FILE = auto()
+    DIRECTORY = auto()
+    # link_path is the package file itself, reached through a directory that
+    # is symlinked into the package (e.g. left behind by GNU stow's folding).
+    # Removing it would delete the source.
+    IS_SOURCE = auto()
+    # An ancestor of link_path exists but is not a directory, so no link can
+    # be created there.
+    PARENT_NOT_DIRECTORY = auto()
 
 
-@dataclass
-class DifferentSymlinkConflict:
-    """Conflict with a symlink pointing to a different target."""
+class Action(Enum):
+    """What install does about one wanted symlink."""
 
-    path: Path
-    points_to: Path  # Where the symlink currently points (relative)
-
-
-# Union type for all conflict types
-Conflict = (
-    FileConflict
-    | DirectoryConflict
-    | CorrectSymlinkConflict
-    | BrokenSymlinkConflict
-    | DifferentSymlinkConflict
-)
+    CREATE = auto()
+    REPLACE = auto()  # Remove whatever is at link_path, then create
+    KEEP = auto()  # Already correct
+    SKIP = auto()  # Leave the conflicting path alone and carry on
+    BLOCK = auto()  # Refuse to install
 
 
-class ConflictMode(str, Enum):
+class ConflictMode(StrEnum):
     """How to handle conflicts when installing."""
 
     ABORT = "abort"
@@ -196,16 +135,26 @@ class ConflictMode(str, Enum):
     FORCE = "force"
 
 
+@dataclass(frozen=True)
+class PlannedLink:
+    """A wanted symlink, the state it was found in, and what to do about it."""
+
+    symlink: Symlink
+    state: LinkState
+    action: Action
+
+
 @dataclass
 class InstallPlan:
-    """Plan for what an install operation would do."""
+    """Plan for what an install operation would do.
+
+    plan_install() never returns a plan containing Action.BLOCK.
+    """
 
     package_name: str
     package_dir: Path
     target_dir: Path
-    wanted_symlinks: list[Symlink]  # All symlinks that should exist after install
-    symlinks_to_create: list[Symlink]
-    conflicts: list[Conflict]
+    links: list[PlannedLink]  # One per symlink that should exist after install
     symlinks_to_remove: list[Symlink]  # Orphaned symlinks from previous install
 
 
@@ -217,4 +166,4 @@ class UninstallPlan:
     target_dir: Path
     symlinks_to_remove: list[Symlink]
     missing_symlinks: list[Path]  # Absolute paths to symlinks that don't exist
-    modified_symlinks: list[Symlink]  # Symlinks that exist but point to wrong target
+    modified_symlinks: list[Symlink]  # No longer haunt's link; left alone

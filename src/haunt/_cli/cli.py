@@ -1,5 +1,7 @@
 """Command-line interface for haunt."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 from typing import NoReturn
@@ -14,8 +16,6 @@ from haunt._cli.output import print_uninstall_plan
 from haunt._registry import Registry
 from haunt.exceptions import ConflictError
 from haunt.exceptions import HauntError
-from haunt.exceptions import PackageAlreadyInstalledError
-from haunt.exceptions import PackageNotFoundError
 from haunt.exceptions import RegistryValidationError
 from haunt.exceptions import RegistryVersionError
 from haunt.models import ConflictMode
@@ -55,6 +55,35 @@ def main_callback(
     pass
 
 
+@contextmanager
+def _exit_on_error(partial: str | None = None) -> Iterator[None]:
+    """Turn expected errors into a message and exit status 1.
+
+    Args:
+        partial: Set while changing the filesystem ("installed" or
+            "uninstalled"), so that an OS error warns about the half-done state.
+    """
+    try:
+        yield
+    except ConflictError as e:
+        print_conflict_error(e)
+        raise typer.Exit(1) from None
+    except (RegistryValidationError, RegistryVersionError) as e:
+        _fatal(f"Registry error: {e}")
+    except (HauntError, ValueError) as e:
+        _fatal(str(e))
+    except PermissionError as e:
+        _fatal(f"Permission denied: {e}")
+    except OSError as e:
+        if partial is None:
+            _fatal(str(e))
+        _fatal(
+            f"Filesystem error: {e}",
+            f"Warning: Package may be partially {partial}. "
+            "Check filesystem and registry manually.",
+        )
+
+
 @app.command()
 def install(
     package: Annotated[Path, typer.Argument(help="Package directory to install")],
@@ -71,43 +100,16 @@ def install(
     ] = ConflictMode.ABORT,
 ) -> None:
     """Install a package by creating symlinks."""
-    if target is None:
-        target = Path.home()
-
-    partial_warning = (
-        "Warning: Package may be partially installed. "
-        "Check filesystem and registry manually."
-    )
-    try:
-        plan = plan_install(package, target, on_conflict=on_conflict)
-        print_install_plan(plan, on_conflict=on_conflict, dry_run=dry_run)
-
-        if not dry_run:
-            apply_install(plan, on_conflict=on_conflict)
-    except PackageAlreadyInstalledError as e:
-        _fatal(str(e))
-    except ConflictError as e:
-        print_conflict_error(e, on_conflict)
-        raise typer.Exit(1) from None
-    except (RegistryValidationError, RegistryVersionError) as e:
-        _fatal(f"Registry error: {e}")
-    except PermissionError as e:
-        _fatal(f"Permission denied: {e}")
-    except FileExistsError as e:
-        _fatal(
-            f"File exists (filesystem changed between planning and execution): {e}",
-            partial_warning,
-        )
-    except ValueError as e:
-        _fatal(str(e))
-    except OSError as e:
-        _fatal(f"Filesystem error: {e}", partial_warning)
-    except HauntError as e:
-        _fatal(f"Error: {e}")
+    with _exit_on_error():
+        plan = plan_install(package, target or Path.home(), on_conflict=on_conflict)
+    if not dry_run:
+        with _exit_on_error(partial="installed"):
+            apply_install(plan)
+    print_install_plan(plan, dry_run=dry_run)
 
 
-@app.command()
-def list(
+@app.command("list")
+def list_packages(
     package: Annotated[
         str | None,
         typer.Argument(help="Show only this package (optional)"),
@@ -118,15 +120,8 @@ def list(
     ] = False,
 ) -> None:
     """List installed packages."""
-    try:
-        registry = Registry()
-        print_package_list(registry, package_name=package, verbose=verbose)
-    except PackageNotFoundError as e:
-        _fatal(str(e))
-    except (RegistryValidationError, RegistryVersionError) as e:
-        _fatal(f"Registry error: {e}")
-    except HauntError as e:
-        _fatal(f"Error: {e}")
+    with _exit_on_error():
+        print_package_list(Registry(), package_name=package, verbose=verbose)
 
 
 @app.command()
@@ -137,26 +132,12 @@ def uninstall(
     ] = False,
 ) -> None:
     """Uninstall a package by removing symlinks."""
-    try:
+    with _exit_on_error():
         plan = plan_uninstall(package)
-        print_uninstall_plan(plan, dry_run=dry_run)
-
-        if not dry_run:
+    if not dry_run:
+        with _exit_on_error(partial="uninstalled"):
             apply_uninstall(plan)
-    except PackageNotFoundError as e:
-        _fatal(str(e))
-    except (RegistryValidationError, RegistryVersionError) as e:
-        _fatal(f"Registry error: {e}")
-    except PermissionError as e:
-        _fatal(f"Permission denied: {e}")
-    except OSError as e:
-        _fatal(
-            f"Filesystem error: {e}",
-            "Warning: Package may be partially uninstalled. "
-            "Check filesystem and registry manually.",
-        )
-    except HauntError as e:
-        _fatal(f"Error: {e}")
+    print_uninstall_plan(plan, dry_run=dry_run)
 
 
 def main() -> None:
