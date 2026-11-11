@@ -167,8 +167,6 @@ Use `--on-conflict=skip` to install non-conflicting files, or `--on-conflict=for
 
 `haunt` will never replace existing directories with symlinks, even with `--on-conflict=force`.
 
-Nor will it touch a path that is really one of the package's own files, which happens when a directory in the target is itself a symlink into the package (GNU stow creates these when it "folds" a directory). Remove that directory symlink first, for example with `stow -D`, then install.
-
 If the filesystem changes between `haunt` deciding what to do and doing it, `haunt` stops before making any change.
 
 ## Multiple packages
