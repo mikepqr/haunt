@@ -259,6 +259,19 @@ class TestDiscoverFilesGit:
         assert Path("tracked.txt") in files
         assert Path("untracked.txt") not in files
 
+    def test_excludes_tracked_files_deleted_from_working_tree(self, tmp_path):
+        """A file removed with plain rm (not git rm) must not be discovered."""
+        package_dir = tmp_path / "package"
+        package_dir.mkdir()
+        subprocess.run(["git", "init"], cwd=package_dir, capture_output=True)
+        (package_dir / "kept.txt").write_text("kept")
+        (package_dir / "deleted.txt").write_text("deleted")
+        subprocess.run(["git", "add", "."], cwd=package_dir)
+
+        (package_dir / "deleted.txt").unlink()
+
+        assert discover_files_git(package_dir) == [Path("kept.txt")]
+
     def test_respects_gitignore(self, tmp_path):
         """Test that .gitignore rules are respected."""
         package_dir = tmp_path / "package"

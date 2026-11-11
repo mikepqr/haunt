@@ -239,6 +239,8 @@ haunt install ~/dotfiles
 
 The reinstall detects the file is now missing from its original location and creates the symlink.
 
+If the package is a git repository, `git add` the new file before reinstalling: only tracked files are symlinked (see [Git Integration](#git-integration)).
+
 To remove a file from a package, delete it from the package directory, then reinstall:
 
 ```bash
@@ -254,7 +256,7 @@ If your package is in a git repository, `haunt` automatically uses `git ls-files
 
 - ✅ `.gitignore` rules are respected automatically
 - ✅ `.git` directory and `.gitmodules` are excluded
-- ✅ Only tracked files are symlinked
+- ✅ Only tracked files are symlinked (tracked files you have deleted from the working tree are skipped)
 - ✅ Files in submodules are discovered
 
 For non-git packages (or if git is not available), `haunt` falls back to discovering all files in the directory tree.

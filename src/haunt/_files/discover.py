@@ -53,7 +53,9 @@ def discover_files_git(package_dir: Path) -> list[Path]:
 
     Returns:
         Sorted list of relative paths to all tracked files, excluding
-        .gitmodules. Includes files in submodules.
+        .gitmodules. Includes files in submodules. Files that are still
+        tracked but have been deleted from the working tree are excluded:
+        there is nothing for a symlink to point to.
     """
     result = subprocess.run(
         ["git", "ls-files", "-z", "--recurse-submodules"],
@@ -69,6 +71,8 @@ def discover_files_git(package_dir: Path) -> list[Path]:
             continue
         file_path = Path(file_str)
         if file_path.name == ".gitmodules":
+            continue
+        if not (package_dir / file_path).exists(follow_symlinks=False):
             continue
         files.append(file_path)
 

@@ -200,6 +200,37 @@ class TestLoadRegistry:
         with pytest.raises(RegistryValidationError, match="Missing required field"):
             Registry(path=registry_file)
 
+    @pytest.mark.parametrize(
+        "document",
+        [
+            None,
+            [],
+            "registry",
+            {"version": "1", "packages": {}},
+            {"version": 1, "packages": []},
+            {"version": 1, "packages": {"pkg": None}},
+            {
+                "version": 1,
+                "packages": {
+                    "pkg": {
+                        "name": "pkg",
+                        "package_dir": "/pkg",
+                        "target_dir": "/home",
+                        "installed_at": "2025-01-01T00:00:00+00:00",
+                        "symlinks": ["not-a-symlink-record"],
+                    }
+                },
+            },
+        ],
+    )
+    def test_wrongly_shaped_json_raises_validation_error(self, tmp_path, document):
+        """Valid JSON that isn't a registry must fail as a HauntError, not a crash."""
+        registry_file = tmp_path / "registry.json"
+        registry_file.write_text(json.dumps(document))
+
+        with pytest.raises(RegistryValidationError):
+            Registry(path=registry_file)
+
 
 class TestSaveRegistry:
     """Tests for registry.save()."""
