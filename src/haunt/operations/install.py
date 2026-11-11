@@ -1,5 +1,6 @@
 """Install operations."""
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -156,6 +157,21 @@ def apply_install(plan: InstallPlan) -> None:
         + [(symlink, LinkState.CORRECT) for symlink in plan.symlinks_to_remove]
     )
 
+    entry = PackageEntry(
+        name=plan.package_name,
+        package_dir=plan.package_dir,
+        target_dir=plan.target_dir,
+        symlinks=[link.symlink for link in plan.links],
+        installed_at=datetime.now().astimezone().isoformat(),
+    )
+    # Record every link this install may create or leave behind before
+    # touching the filesystem, so an interrupted install can still be
+    # uninstalled or re-run.
+    registry.packages[plan.package_name] = replace(
+        entry, symlinks=entry.symlinks + plan.symlinks_to_remove
+    )
+    registry.save()
+
     for symlink in plan.symlinks_to_remove:
         symlink.link_path.unlink()
     remove_empty_directories(
@@ -168,11 +184,5 @@ def apply_install(plan: InstallPlan) -> None:
         if link.action in (Action.CREATE, Action.REPLACE):
             create_symlink(link.symlink)
 
-    registry.packages[plan.package_name] = PackageEntry(
-        name=plan.package_name,
-        package_dir=plan.package_dir,
-        target_dir=plan.target_dir,
-        symlinks=[link.symlink for link in plan.links],
-        installed_at=datetime.now().astimezone().isoformat(),
-    )
+    registry.packages[plan.package_name] = entry
     registry.save()
