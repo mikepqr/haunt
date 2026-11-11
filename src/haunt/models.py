@@ -35,8 +35,15 @@ class Symlink:
 
     @property
     def relative_source_path(self) -> Path:
-        """Get source_path as relative to link_path's parent."""
-        return self.source_path.relative_to(self.link_path.parent, walk_up=True)
+        """Get source_path relative to the directory that really contains link_path.
+
+        The OS resolves a relative symlink against the real location of its
+        directory, not the path used to reach it, so symlinked ancestors of
+        link_path must be resolved first.
+        """
+        return self.source_path.relative_to(
+            self.link_path.parent.resolve(), walk_up=True
+        )
 
     def points_to(self, target: Path) -> bool:
         """Check if target points to the same location as source_path.
